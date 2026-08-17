@@ -59,7 +59,6 @@ const authToggleText = document.getElementById("auth-toggle-text");
 const authToggleBtn = document.getElementById("auth-toggle-btn");
 const authCancelBtn = document.getElementById("auth-cancel-btn");
 const googleAuthBtn = document.getElementById("google-auth-btn");
-const microsoftAuthBtn = document.getElementById("microsoft-auth-btn");
 
 // --- Storage ---
 //
@@ -1091,10 +1090,6 @@ authForm.addEventListener("submit", async (e) => {
 
 googleAuthBtn.addEventListener("click", () => {
   supabaseClient.auth.signInWithOAuth({ provider: "google" });
-});
-
-microsoftAuthBtn.addEventListener("click", () => {
-  supabaseClient.auth.signInWithOAuth({ provider: "azure" });
 });
 
 // --- Bootstrap ---
