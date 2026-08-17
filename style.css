@@ -264,11 +264,32 @@ body {
 
 .habit-card-actions {
   display: flex;
-  gap: 2px;
+  align-items: center;
+  gap: 6px;
   flex-shrink: 0;
 }
 
-.edit-btn,
+.edit-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 5px 10px;
+  border-radius: 999px;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.edit-btn:hover {
+  background: var(--success-bg);
+  color: var(--accent);
+  border-color: var(--accent-light);
+}
+
 .delete-btn {
   border: none;
   background: transparent;
@@ -279,11 +300,6 @@ body {
   height: 28px;
   border-radius: 50%;
   transition: background 0.15s ease, color 0.15s ease;
-}
-
-.edit-btn:hover {
-  background: var(--success-bg);
-  color: var(--accent);
 }
 
 .delete-btn:hover {
@@ -339,39 +355,34 @@ body {
   margin-bottom: 16px;
 }
 
-.week-dots {
-  display: flex;
-  gap: 6px;
-}
-
-.week-dot {
-  flex: 1;
-  height: 8px;
-  border-radius: 4px;
-  background: var(--border);
-}
-
-.week-dot.filled {
-  background: var(--success);
-}
-
-.week-dot.today {
-  outline: 2px solid var(--accent-light);
-  outline-offset: 1px;
-}
-
 .progress-bar-track {
-  height: 8px;
-  border-radius: 4px;
+  height: 10px;
+  border-radius: 999px;
   background: var(--border);
   overflow: hidden;
 }
 
 .progress-bar-fill {
   height: 100%;
-  border-radius: 4px;
+  border-radius: 999px;
   background: var(--success);
-  transition: width 0.25s ease;
+  transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes progress-fill-glow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(0, 184, 148, 0);
+  }
+  40% {
+    box-shadow: 0 0 10px 2px var(--success);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 184, 148, 0);
+  }
+}
+
+.progress-bar-fill.goal-met {
+  animation: progress-fill-glow 0.6s ease;
 }
 
 .habit-actions {
@@ -410,6 +421,14 @@ body {
 
 .complete-btn.done:hover {
   background: var(--success-bg-hover);
+}
+
+.complete-btn:disabled {
+  cursor: default;
+}
+
+.complete-btn:disabled:active {
+  transform: none;
 }
 
 .undo-btn {

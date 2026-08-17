@@ -83,17 +83,6 @@ function todayKey() {
   return formatDate(new Date());
 }
 
-// Last 7 days including today, oldest first.
-function lastSevenDays() {
-  const days = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    days.push(formatDate(d));
-  }
-  return days;
-}
-
 // --- Period helpers ---
 // A habit's cadence is "target times every periodValue periodUnit(s)".
 // Internally everything reduces to a rolling window of periodDays ending on a given date.
@@ -246,6 +235,8 @@ function allHabitsMetToday(habits) {
 
 const TIER_ICONS = ["🔥", "🔥🔥", "🌟", "💎"];
 const previousStreakTiers = new Map();
+const previousGoalMet = new Map();
+const previousFillPct = new Map();
 
 function tierIndex(streak) {
   if (streak >= 100) return 3;
@@ -311,6 +302,8 @@ function render() {
 
   emptyState.style.display = habits.length === 0 ? "block" : "none";
 
+  const pendingFillUpdates = [];
+
   habits.forEach((habit) => {
     const node = cardTemplate.content.cloneNode(true);
     const card = node.querySelector(".habit-card");
@@ -350,27 +343,28 @@ function render() {
       : `${periodCount} / ${target} in the last ${periodPhrase(period)}`;
 
     const visual = node.querySelector(".progress-visual");
-    if (isDaily) {
-      const dotsContainer = document.createElement("div");
-      dotsContainer.className = "week-dots";
-      const today = todayKey();
-      lastSevenDays().forEach((day) => {
-        const dot = document.createElement("div");
-        dot.className = "week-dot";
-        if (countOnDate(habit.completions, day) >= target) dot.classList.add("filled");
-        if (day === today) dot.classList.add("today");
-        dotsContainer.appendChild(dot);
-      });
-      visual.appendChild(dotsContainer);
-    } else {
-      const track = document.createElement("div");
-      track.className = "progress-bar-track";
-      const fill = document.createElement("div");
-      fill.className = "progress-bar-fill";
-      fill.style.width = `${Math.min(100, (periodCount / target) * 100)}%`;
-      track.appendChild(fill);
-      visual.appendChild(track);
+    const track = document.createElement("div");
+    track.className = "progress-bar-track";
+    const fill = document.createElement("div");
+    fill.className = "progress-bar-fill";
+
+    // Freshly-created elements have no prior on-screen width to transition from, so start
+    // each fill at its last known % and let the post-render frame animate it to the new one.
+    const fillPct = Math.min(100, (periodCount / target) * 100);
+    const prevFillPct = previousFillPct.has(habit.id) ? previousFillPct.get(habit.id) : fillPct;
+    fill.style.width = `${prevFillPct}%`;
+    previousFillPct.set(habit.id, fillPct);
+    pendingFillUpdates.push({ fill, fillPct });
+
+    const wasGoalMet = previousGoalMet.get(habit.id);
+    if (goalMet && wasGoalMet === false) {
+      fill.classList.add("goal-met");
+      fill.addEventListener("animationend", () => fill.classList.remove("goal-met"), { once: true });
     }
+    previousGoalMet.set(habit.id, goalMet);
+
+    track.appendChild(fill);
+    visual.appendChild(track);
 
     const completeBtn = node.querySelector(".complete-btn");
     if (target === 1 && isDaily) {
@@ -379,6 +373,7 @@ function render() {
       completeBtn.textContent = goalMet ? "Mark done ✓" : "Mark done";
     }
     completeBtn.classList.toggle("done", goalMet);
+    completeBtn.disabled = goalMet;
     completeBtn.addEventListener("click", () => {
       markDone(habit.id);
       celebrate(habit.id);
@@ -392,6 +387,15 @@ function render() {
     node.querySelector(".delete-btn").addEventListener("click", () => deleteHabit(habit.id));
 
     list.appendChild(node);
+  });
+
+  // Force layout so the browser commits each fill's starting width before we change it,
+  // otherwise the two writes collapse into one and the transition never plays.
+  list.offsetHeight;
+  requestAnimationFrame(() => {
+    pendingFillUpdates.forEach(({ fill, fillPct }) => {
+      fill.style.width = `${fillPct}%`;
+    });
   });
 }
 

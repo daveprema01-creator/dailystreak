@@ -36,7 +36,7 @@ Everything lives in three flat files with no modules/bundler — `index.html` lo
 
 **Rendering** (`render()` in `app.js`): fully re-renders the entire `#habit-list` from `localStorage` on every mutation (add/delete/mark-done/undo) — it clones `#habit-card-template` per habit rather than diffing. Every mutation function (`addHabit`, `deleteHabit`, `markDone`, `undoLast`) follows the same pattern: mutate the array, `saveHabits()`, call `render()`.
 
-**Two visual modes per habit card** depending on whether the period is daily (`periodDays === 1`): a 7-day dot grid (`.week-dots`) for daily goals, or a single progress bar (`.progress-bar-track`/`-fill`) for longer/custom periods — built conditionally inside `render()`.
+**Progress visual**: every habit card shows a single animated progress bar (`.progress-bar-track`/`-fill`) filled to `periodCount / target`, regardless of period. The complete-button is `disabled` once `goalMet` so completions can't exceed `target`; a habit's own 7-day/12-week history lives in the history modal (heatmap), not on the card.
 
 **Theming**: all colors are CSS custom properties on `:root` in `style.css`, with overrides under both `@media (prefers-color-scheme: dark)` and `:root[data-theme="dark"]` so the in-app toggle (`app.js` `applyTheme`/`initTheme`) can override system preference. When adding UI, use existing `var(--...)` tokens rather than hardcoded colors so dark mode keeps working.
 
