@@ -9,6 +9,7 @@
 <body>
   <div class="app">
     <header class="app-header">
+      <button id="account-btn" class="account-btn" type="button">Sign in to sync</button>
       <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode">🌙</button>
       <p id="greeting" class="greeting"></p>
       <h1>Daily Streak</h1>
@@ -157,8 +158,50 @@
     </div>
   </div>
 
+  <div id="auth-modal" class="modal-overlay">
+    <div class="modal">
+      <h2 id="auth-modal-title">Sign in</h2>
+      <p id="auth-modal-subtitle">Sign in to sync your habits across devices.</p>
+
+      <div class="oauth-buttons">
+        <button type="button" id="google-auth-btn" class="oauth-btn">🔵 Continue with Google</button>
+        <button type="button" id="microsoft-auth-btn" class="oauth-btn">🟦 Continue with Microsoft</button>
+      </div>
+
+      <div class="auth-divider"><span>or</span></div>
+
+      <form id="auth-form">
+        <input
+          id="auth-email-input"
+          type="email"
+          placeholder="Email"
+          autocomplete="email"
+          required
+        />
+        <input
+          id="auth-password-input"
+          type="password"
+          placeholder="Password"
+          autocomplete="current-password"
+          required
+          minlength="6"
+        />
+        <p id="auth-error" class="auth-error"></p>
+        <button type="submit" id="auth-submit-btn">Sign in</button>
+      </form>
+
+      <p class="auth-toggle-row">
+        <span id="auth-toggle-text">Don't have an account?</span>
+        <button type="button" id="auth-toggle-btn" class="link-btn">Sign up</button>
+      </p>
+
+      <button type="button" id="auth-cancel-btn" class="modal-btn-secondary auth-cancel-btn">Close</button>
+    </div>
+  </div>
+
   <div id="toast-stack" class="toast-stack"></div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="app.js"></script>
 </body>
 </html>

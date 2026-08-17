@@ -571,6 +571,86 @@ body {
   background: var(--accent-hover);
 }
 
+.oauth-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.modal .oauth-btn {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-weight: 600;
+}
+
+.modal .oauth-btn:hover {
+  background: var(--card-bg);
+  border-color: var(--accent-light);
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.auth-error {
+  display: none;
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.auth-error.visible {
+  display: block;
+}
+
+.auth-error.success {
+  color: var(--success);
+}
+
+.auth-toggle-row {
+  margin: 14px 0 0;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.modal .link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.modal .link-btn:hover {
+  text-decoration: underline;
+}
+
+.auth-cancel-btn {
+  width: 100%;
+  margin-top: 10px;
+}
+
 .modal-goal-row {
   display: flex;
   align-items: center;
@@ -614,13 +694,13 @@ body {
   flex: 1;
 }
 
-.modal-btn-row .modal-btn-secondary {
+.modal .modal-btn-secondary {
   background: transparent;
   color: var(--text-muted);
   border: 1px solid var(--border);
 }
 
-.modal-btn-row .modal-btn-secondary:hover {
+.modal .modal-btn-secondary:hover {
   background: var(--bg);
   color: var(--text);
 }
@@ -745,6 +825,36 @@ body {
 .theme-toggle:hover {
   box-shadow: var(--shadow-hover);
   transform: scale(1.05);
+}
+
+.account-btn {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 9px 14px;
+  border-radius: 999px;
+  border: none;
+  background: var(--card-bg);
+  box-shadow: var(--shadow);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
+}
+
+.account-btn:hover {
+  box-shadow: var(--shadow-hover);
+  transform: scale(1.03);
+  color: var(--accent);
+}
+
+.account-btn.signed-in {
+  color: var(--success);
 }
 
 .app-header {
