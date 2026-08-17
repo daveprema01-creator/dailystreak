@@ -1070,7 +1070,11 @@ authForm.addEventListener("submit", async (e) => {
   const { error } =
     authMode === "sign-in"
       ? await supabaseClient.auth.signInWithPassword({ email, password })
-      : await supabaseClient.auth.signUp({ email, password });
+      : await supabaseClient.auth.signUp({
+          email,
+          password,
+          options: { emailRedirectTo: window.location.href },
+        });
 
   authSubmitBtn.disabled = false;
 
@@ -1089,7 +1093,10 @@ authForm.addEventListener("submit", async (e) => {
 });
 
 googleAuthBtn.addEventListener("click", () => {
-  supabaseClient.auth.signInWithOAuth({ provider: "google" });
+  supabaseClient.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo: window.location.href },
+  });
 });
 
 // --- Bootstrap ---
