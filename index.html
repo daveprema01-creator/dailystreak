@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Daily Streak</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode">🌙</button>
+      <p id="greeting" class="greeting"></p>
+      <h1>Daily Streak</h1>
+      <p class="subtitle">Build habits, one day at a time.</p>
+    </header>
+
+    <div class="data-actions">
+      <button id="export-btn" class="data-btn">Export backup</button>
+      <button id="import-btn" class="data-btn">Import backup</button>
+      <input type="file" id="import-file" accept="application/json" hidden />
+    </div>
+
+    <form id="add-habit-form" class="add-habit-form">
+      <div class="add-habit-main">
+        <input
+          id="habit-input"
+          type="text"
+          placeholder="Add a new habit… (e.g. Drink water)"
+          autocomplete="off"
+          maxlength="60"
+        />
+        <button type="submit">Add</button>
+      </div>
+      <div class="add-habit-goal">
+        <span>Goal:</span>
+        <input id="target-input" type="number" min="1" max="99" value="1" />
+        <span>time(s) every</span>
+        <input id="period-value-input" type="number" min="1" max="99" value="1" />
+        <select id="period-unit-input">
+          <option value="day">day(s)</option>
+          <option value="week">week(s)</option>
+          <option value="month">month(s)</option>
+        </select>
+      </div>
+    </form>
+
+    <div id="habit-list" class="habit-list"></div>
+
+    <p id="empty-state" class="empty-state">
+      No habits yet. Add your first one above to get started.
+    </p>
+  </div>
+
+  <template id="habit-card-template">
+    <div class="habit-card" data-id="">
+      <div class="habit-card-top">
+        <div>
+          <button type="button" class="habit-name" title="View history"></button>
+          <div class="habit-goal-text"></div>
+        </div>
+        <div class="habit-card-actions">
+          <button class="edit-btn" title="Edit habit" aria-label="Edit habit">✏️</button>
+          <button class="delete-btn" title="Delete habit" aria-label="Delete habit">✕</button>
+        </div>
+      </div>
+
+      <div class="habit-stats">
+        <div class="streak-stat">
+          <span class="streak-flame">🔥</span>
+          <span class="streak-text"></span>
+        </div>
+        <div class="period-text"></div>
+      </div>
+
+      <div class="progress-visual"></div>
+
+      <div class="habit-actions">
+        <button class="complete-btn">Mark today done</button>
+        <button class="undo-btn" title="Undo last completion">Undo</button>
+      </div>
+    </div>
+  </template>
+
+  <div id="name-modal" class="modal-overlay">
+    <div class="modal">
+      <h2>Welcome to Daily Streak!</h2>
+      <p>What should we call you?</p>
+      <form id="name-form">
+        <input
+          id="name-input"
+          type="text"
+          placeholder="Your name"
+          autocomplete="off"
+          maxlength="30"
+        />
+        <button type="submit">Continue</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="edit-habit-modal" class="modal-overlay">
+    <div class="modal">
+      <h2>Edit habit</h2>
+      <form id="edit-habit-form">
+        <input
+          id="edit-habit-input"
+          type="text"
+          placeholder="Habit name"
+          autocomplete="off"
+          maxlength="60"
+        />
+        <div class="modal-goal-row">
+          <span>Goal:</span>
+          <input id="edit-target-input" type="number" min="1" max="99" value="1" />
+          <span>time(s) every</span>
+          <input id="edit-period-value-input" type="number" min="1" max="99" value="1" />
+          <select id="edit-period-unit-input">
+            <option value="day">day(s)</option>
+            <option value="week">week(s)</option>
+            <option value="month">month(s)</option>
+          </select>
+        </div>
+        <div class="modal-btn-row">
+          <button type="button" id="edit-cancel-btn" class="modal-btn-secondary">Cancel</button>
+          <button type="submit">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="history-modal" class="modal-overlay">
+    <div class="modal modal-wide">
+      <button id="history-close-btn" class="modal-close-btn" aria-label="Close">✕</button>
+      <h2 id="history-habit-name"></h2>
+      <div class="history-stats">
+        <div class="history-stat">
+          <span class="history-stat-value" id="history-current-streak"></span>
+          <span class="history-stat-label">Current streak</span>
+        </div>
+        <div class="history-stat">
+          <span class="history-stat-value" id="history-longest-streak"></span>
+          <span class="history-stat-label">Longest streak</span>
+        </div>
+        <div class="history-stat">
+          <span class="history-stat-value" id="history-total"></span>
+          <span class="history-stat-label">Total completions</span>
+        </div>
+        <div class="history-stat">
+          <span class="history-stat-value" id="history-rate"></span>
+          <span class="history-stat-label">Completion rate</span>
+        </div>
+      </div>
+      <div class="heatmap-scroll">
+        <div id="history-heatmap" class="heatmap"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-stack" class="toast-stack"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
