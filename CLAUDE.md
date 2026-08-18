@@ -4,52 +4,66 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Daily Streak — a minimal habit tracker. Vanilla HTML/CSS/JS with **no build tools, no package manager, no framework**. Three files: `index.html`, `style.css`, `app.js`. Signing in is optional: signed out, all state lives in the browser's `localStorage`; signed in, the same UI reads/writes a Supabase Postgres table instead, so habits sync across devices. The Supabase JS SDK is loaded via a plain CDN `<script>` tag (no bundler) to keep the no-build-tools constraint intact.
+Daily Streak — a minimal habit tracker. Vanilla HTML/CSS/JS with **no build tools, no package manager, no framework**. Three files: `index.html`, `style.css`, `app.js`. Signing in is optional: signed out, all state lives in the browser's `localStorage`; signed in, the same UI reads/writes a Supabase Postgres table instead, so habits sync across devices. The Supabase JS SDK is loaded via a plain CDN `<script>` tag (no bundler) to keep the no-build-tools constraint intact. Design system: warm-cream canvas, coffee-ink surfaces, a single orange accent — see `design_handoff_daily_streak/README.md` and `design.md` before changing colors, type, or spacing.
 
 ## Running it
 
-There is no build/lint/test tooling in this project. To run it:
+There is no build/lint/test tooling in this project.
 
-- Open `index.html` directly in a browser, or
-- Serve it locally for a more realistic environment: `python3 -m http.server 8642` from this directory, then visit `http://localhost:8642/index.html`.
-
-To verify a change, reload the page in a browser and exercise the feature manually — there is no automated test suite.
+- Open `index.html` directly in a browser, or serve it locally: `python3 -m http.server 8642` from this directory, then visit `http://localhost:8642/index.html`.
+- To verify a change, reload the page and exercise the feature manually in a real browser — there is no automated test suite, and plain code review has already missed real bugs here (a UTC date-parsing bug and a CSS `[hidden]`-specificity bug both only showed up once actually clicked through).
 
 ## Architecture
 
 Everything lives in three flat files with no modules/bundler — `index.html` loads `style.css` and `app.js` directly via `<link>`/`<script>` tags.
 
-**Storage (localStorage keys, defined at the top of `app.js`) — used when signed out:**
-- `daily-streak-habits` — JSON array of habit objects (see below)
-- `daily-streak-username` — the user's display name, set via a first-visit modal
-- `daily-streak-theme` — `"light"` or `"dark"`, absent means "follow system preference" (this key is used regardless of sign-in state — theme is a device preference, not synced)
+### Storage
 
-**Sync (Supabase, project ref `yyeexumwqboxfpbssoqj`) — used when signed in:** a single RLS-scoped `habits` table (`id, user_id, name, target, period_value, period_unit, created_at, completions, milestones_hit, rest_days, position`) mirrors the local habit shape almost 1:1 — `habitToRow`/`rowToHabit` in `app.js` convert between the two. `completions`/`milestones_hit`/`rest_days` are `jsonb` columns holding JS arrays. `position` is a DB-only identity column used purely for `ORDER BY` on fetch; the in-memory array's own order already reflects it and it never round-trips into the JS habit object. The display name synced across devices is stored in Supabase auth's `user_metadata.display_name` rather than in `localStorage`. Auth supports email/password plus Google OAuth via `supabaseClient.auth.signInWithOAuth`.
+- `daily-streak-habits` (localStorage) — JSON array of habit objects, used when signed out.
+- `daily-streak-username` (localStorage) — display name; also doubles as a pending name during account creation (see Onboarding).
+- `daily-streak-theme` (localStorage) — `"light"`/`"dark"`, absent means "follow system." Used regardless of sign-in state — theme is a device preference, not synced.
+- **Supabase** (project ref `yyeexumwqboxfpbssoqj`, used when signed in): one RLS-scoped `habits` table (`id, user_id, name, target, period_value, period_unit, created_at, completions, milestones_hit, rest_days, position`). `habitToRow`/`rowToHabit` in `app.js` convert to/from the local habit shape. `completions`/`milestones_hit`/`rest_days` are `jsonb` columns holding JS arrays. `position` is a DB-only identity column for `ORDER BY` on fetch — the in-memory array's own order already reflects it and it never round-trips into the JS object. The synced display name lives in Supabase auth's `user_metadata.display_name`, not a table column. Auth supports email/password plus Google OAuth.
 
-**The `habitsCache` array** (`app.js`, top of file) is the single in-memory source of truth every render/stat function reads through `loadHabits()`. `refreshHabitsCache()` fills it from either `localStorage` (signed out) or a Supabase `select` (signed in) and is called on the initial `onAuthStateChange` firing and again on every sign-in/sign-out. Mutations (`addHabit`, `deleteHabit`/`restoreHabit`, `markDone`/`undoLast`, the edit-form submit) update `habitsCache` in place and call `render()` immediately for an instant UI update, *then* fire an `async` targeted Supabase `insert`/`update`/`delete` (or `saveLocalHabits()` when signed out) in the background — a failed cloud write surfaces a toast (reusing `.undo-toast` styling) rather than failing silently or blocking the UI.
+The `habitsCache` array (top of `app.js`) is the single in-memory source of truth every render/stat function reads via `loadHabits()`. `refreshHabitsCache()` fills it from `localStorage` or a Supabase `select` and runs on the first `onAuthStateChange` and every sign-in/sign-out after. Mutations update `habitsCache` in place, call `render()` immediately, *then* fire an `async` Supabase write (or `saveLocalHabits()`) in the background — a failed cloud write surfaces a toast rather than blocking the UI.
 
-**Habit data model** (`app.js`, `addHabit`):
+### Habit data model
+
 ```
 { id, name, target, periodValue, periodUnit, completions: [...dateStrings], milestonesHit: [...numbers], restDays: [...dateStrings] }
 ```
-`completions` is a flat array of `YYYY-MM-DD` strings, one entry per completion — the same date can appear multiple times for habits with a target > 1. There is no per-completion timestamp, only the date. `restDays` is the same shape, one entry per period a rest day was spent on (see "Rest days" below) — it never overlaps with `completions`.
 
-**Date parsing**: any stored `YYYY-MM-DD` key must go through `parseDateKey()`, not `new Date(dateStr)` — the latter parses as UTC and silently shifts a day in timezones behind UTC. `new Date()` with no argument (today) and cloning an existing `Date` object are both fine as-is.
+`completions` is a flat array of `YYYY-MM-DD` strings, one entry per completion (a date can repeat for target > 1) — no per-completion timestamp. `restDays` is the same shape, one entry per period a rest day was spent on; never overlaps `completions`.
 
-**Rest days**: each habit gets 3 rest days per calendar month (`restDaysLeft`, `restDaysUsedThisMonth`), spendable to credit a missed period without it counting as a real completion. `calcStreak`/`longestStreak` add `restDaysInWindow(...)` on top of `countInWindow(...)` when checking whether a window met target; `totalCompletions`/`completionRate` deliberately don't. `pickRestOfferHabit()` decides which habit (if any) shows the rest-day offer card in place of its normal card on a given render; declining is tracked only in the in-memory `dismissedRestOffers` set (no persisted field for it). The underlying streak math stays a pure rolling window (see below) — `periodDaysLeft()`/`previousPeriodWindow()` layer a creation-date-anchored period grid on top purely for the rest-day-offer and at-risk UI, not for `calcStreak` itself.
+**Date parsing gotcha**: any stored `YYYY-MM-DD` key must go through `parseDateKey()`, never `new Date(dateStr)` — the latter parses as UTC and silently shifts a day in timezones behind UTC. `new Date()` (today) and cloning an existing `Date` are both fine as-is.
 
-**Period/cadence system** — a habit's goal is "`target` times every `periodValue` `periodUnit`(s)" (day/week/month/custom). This is the trickiest part of the codebase: everything reduces to a single abstraction, a rolling N-day window ending on a given date (`periodDays`, `countInWindow`, `calcStreak` in `app.js`). Day, week, month, and custom-day cadences are NOT handled as special cases — they all go through the same rolling-window math with `UNIT_DAYS = { day: 1, week: 7, month: 30 }`. `getPeriod()` also handles back-compat with an older `{ timeframe: "day" | "week" }` data shape from before the flexible-period feature existed.
+### Period/cadence system
 
-**Streak semantics**: a streak counts consecutive *completed* periods, but the current (still in-progress) period doesn't break the streak just because it isn't finished yet — `calcStreak` checks whether the current window already fails the target and, if so, starts counting from the *previous* window instead. This "still alive until proven broken" leniency is intentional, not a bug.
+A habit's goal is "`target` times every `periodValue` `periodUnit`(s)" (day/week/month/custom). This is the trickiest part of the codebase: everything reduces to one abstraction, a rolling N-day window ending on a given date (`periodDays`, `countInWindow`, `calcStreak`). Day/week/month/custom are NOT special-cased — they all go through the same math with `UNIT_DAYS = { day: 1, week: 7, month: 30 }`. `getPeriod()` also back-compats an older `{ timeframe: "day" | "week" }` shape.
 
-**Rendering** (`render()` in `app.js`): fully re-renders the entire `#habit-list` from `habitsCache` on every mutation (add/delete/mark-done/undo) — it clones `#habit-card-template` per habit rather than diffing, except for the one habit `pickRestOfferHabit()` selects (if any), which clones `#habit-offer-card-template` instead. `render()` also calls `updateHero()` (the dark hero band's longest-run/done-today/last-12-weeks/rest-days-left stats) and `pickAtRiskHabit()` (flips at most one non-offer card to the ink "at risk" polarity, via `.habit-card.at-risk`). The complete-button is `disabled` once `goalMet` so completions can't exceed `target`.
+**Streak semantics**: a streak counts consecutive *completed* periods, but the current in-progress period doesn't break it just because it isn't finished — `calcStreak` falls back to the *previous* window if the current one hasn't met target yet. This "still alive until proven broken" leniency is intentional.
 
-**Card map**: each habit card shows a 12-week map (`renderCardMap()`, reusing `buildHeatmap`/`heatmapLevel`) instead of a progress bar — filled cells are `.map-cell.level-1..4`, rest days are `.map-cell.rested`, today is `.map-cell.today`. The same `buildHeatmap`/`heatmapLevel` pair also drives the larger heatmap in the history modal (`renderHeatmap()`), which shows a habit's full current/longest streak and completion-rate stats.
+Because the rolling window has no calendar anchor, two features layer a creation-date-anchored period grid on top purely for UI purposes (not used by `calcStreak` itself): `periodDaysLeft()`/`previousPeriodWindow()`, consumed by the at-risk flip and rest-day offer below.
 
-**Weekly review** (`#weekly-review-view`, opened via `openWeeklyReview()`/`renderWeeklyReview()`): a second top-level view toggled in place of `#main-view` — not a route, just a show/hide swap, since there's no router. Recaps the most recently completed Monday–Sunday week (a display-only convention layered on top of the rolling-window streak math, not a change to it) and surfaces at most one "drifting" habit via `computeDrift()` (median gap between completions vs. its cadence). Accepting a drift suggestion and the edit-habit modal's submit both funnel through the shared `saveHabitEdits()`.
+### Rest days
 
-**Theming**: all colors are CSS custom properties on `:root` in `style.css`, with overrides under both `@media (prefers-color-scheme: dark)` and `:root[data-theme="dark"]` so the in-app toggle (`app.js` `applyTheme`/`initTheme`) can override system preference. When adding UI, use existing `var(--...)` tokens rather than hardcoded colors so dark mode keeps working. Exception: the ink surfaces (hero band, at-risk card, rest-day offer card, weekly review's drifting tile) are hardcoded to the design system's literal coffee/orange hex values (`#201515`, `#ff4f00`, etc.) rather than theme tokens — they're deliberately the same "always ink" surface regardless of the light/dark toggle, not a missed dark-mode case.
+Each habit gets 3 rest days per calendar month (`restDaysLeft`, `restDaysUsedThisMonth`), spendable to credit a missed period without it counting as a real completion. `calcStreak`/`longestStreak` add `restDaysInWindow(...)` on top of `countInWindow(...)`; `totalCompletions`/`completionRate` deliberately don't. `pickRestOfferHabit()` picks which habit (if any) shows the offer card in place of its normal card; declining is tracked only in the in-memory `dismissedRestOffers` set — no persisted field for it.
 
-**Milestone celebrations**: `markDone()` computes the new streak after each completion and checks it against `STREAK_MILESTONES = [7, 30, 100, 365]`, tracking which have already fired per-habit in `milestonesHit` so each one celebrates exactly once. Celebrations are a `.milestone-toast` message plus a `.habit-card.celebrate` pulse — no confetti/particle effects and no emoji tier icons; the design system allows exactly one chromatic accent (`--accent`), so streak numerals are plain numbers.
+### Rendering
 
-**Backup/restore**: `exportData()`/`importData()` serialize `{ name, habits }` to/from a downloaded JSON file, working against whatever's currently loaded (local or cloud). For a signed-out user this remains the only way data survives a cleared `localStorage` or a device switch; for a signed-in user it's a manual export/full-replace-import on top of the automatic sync. Signing in for the first time with existing local habits and an empty cloud account prompts (via `confirm()`, same pattern as import) to bulk-copy the local habits into the new account.
+`render()` fully re-renders `#habit-list` from `habitsCache` on every mutation — clones `#habit-card-template` per habit, except the one habit `pickRestOfferHabit()` selects (if any), which clones `#habit-offer-card-template` instead. Also calls `updateHero()` (hero band stats) and `pickAtRiskHabit()` (flips at most one non-offer card to the ink "at risk" polarity via `.habit-card.at-risk`). Each card shows a 12-week map (`renderCardMap()`, reusing `buildHeatmap`/`heatmapLevel`) instead of a progress bar — `.map-cell.level-1..4` filled, `.rested` grey, `.today` ringed. The same `buildHeatmap`/`heatmapLevel` pair drives the larger heatmap in the history modal (`renderHeatmap()`). The complete-button is `disabled` once `goalMet`.
+
+### Weekly review
+
+`#weekly-review-view`, opened via `openWeeklyReview()`/`renderWeeklyReview()`, toggles in place of `#main-view` — a show/hide swap, not a route (no router). Recaps the most recently completed Monday–Sunday week (a display-only convention on top of the rolling-window math, not a change to it) and surfaces at most one "drifting" habit via `computeDrift()` (median completion gap vs. cadence). Accepting a drift suggestion and the edit-habit modal's submit both funnel through the shared `saveHabitEdits()`.
+
+### Onboarding
+
+First-time users (`getDisplayName()` empty) see `#welcome-modal` via `initName()`, not `#name-modal` directly — choose Google, email signup, or stay logged out (`onboardingNameTarget` tracks which follow-up the name prompt is for). The typed/chosen name is always `saveName()`d locally first, which matters because it has to survive a page reload if Supabase requires email confirmation before the account goes live. `onAuthStateChange` promotes that pending name (or the Google profile's `full_name`/`name`) onto `user_metadata.display_name` the first time `currentUser` has none — deliberately **outside** the `justSignedIn` check, since a real OAuth redirect reloads the whole page and resets `authBootstrapped`, making `justSignedIn` false even on a first sign-in.
+
+### Theming
+
+All colors are CSS custom properties on `:root` in `style.css`, overridden under both `@media (prefers-color-scheme: dark)` and `:root[data-theme="dark"]` so the in-app toggle (`applyTheme`/`initTheme`) can override system preference. Use existing `var(--...)` tokens for new UI. Exception: the ink surfaces (hero band, at-risk card, rest-day offer card, weekly review's drifting tile) are hardcoded to literal hex (`#201515`, `#ff4f00`, etc.) — they're deliberately "always ink" regardless of the light/dark toggle, not a missed dark-mode case.
+
+### Milestones & backup
+
+`markDone()` checks the new streak against `STREAK_MILESTONES = [7, 30, 100, 365]`, tracked per-habit in `milestonesHit` so each fires once — a `.milestone-toast` plus a `.habit-card.celebrate` pulse, no confetti and no emoji tier icons (the design system allows exactly one chromatic accent). `exportData()`/`importData()` serialize `{ name, habits }` to/from a JSON file against whatever's currently loaded; for a signed-out user it's the only way data survives a cleared `localStorage`. First sign-in with existing local habits and an empty cloud account prompts (`confirm()`) to bulk-copy them in.
