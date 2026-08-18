@@ -7,6 +7,12 @@ const SUPABASE_URL = "https://yyeexumwqboxfpbssoqj.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_Xha7Zhl44-L9zmU_YjWZJg_6uHxwR5Y";
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./service-worker.js").catch(() => {});
+  });
+}
+
 // In-memory source of truth for the currently-rendered habits — populated from either
 // localStorage (signed out) or Supabase (signed in) by refreshHabitsCache().
 let habitsCache = [];
@@ -23,6 +29,11 @@ const cardTemplate = document.getElementById("habit-card-template");
 const offerCardTemplate = document.getElementById("habit-offer-card-template");
 const addHabitToggle = document.getElementById("add-habit-toggle");
 const greeting = document.getElementById("greeting");
+const archivedSection = document.getElementById("archived-section");
+const archivedToggle = document.getElementById("archived-toggle");
+const archivedCount = document.getElementById("archived-count");
+const archivedList = document.getElementById("archived-list");
+const archivedRowTemplate = document.getElementById("archived-row-template");
 
 const heroLongestLabel = document.getElementById("hero-longest-label");
 const heroLongestNumeral = document.getElementById("hero-longest-numeral");
@@ -30,11 +41,14 @@ const heroLongestUnit = document.getElementById("hero-longest-unit");
 const heroStatDone = document.getElementById("hero-stat-done");
 const heroStatRate = document.getElementById("hero-stat-rate");
 const heroStatRest = document.getElementById("hero-stat-rest");
+const heroStatPerfect = document.getElementById("hero-stat-perfect");
 
 const mainView = document.getElementById("main-view");
 const reviewBtn = document.getElementById("review-btn");
 const weeklyReviewView = document.getElementById("weekly-review-view");
 const reviewBackBtn = document.getElementById("review-back-btn");
+const reviewPrevBtn = document.getElementById("review-prev-btn");
+const reviewNextBtn = document.getElementById("review-next-btn");
 const reviewEyebrow = document.getElementById("review-eyebrow");
 const reviewHeadline = document.getElementById("review-headline");
 const reviewLead = document.getElementById("review-lead");
@@ -49,6 +63,14 @@ const reviewDriftHeadline = document.getElementById("review-drift-headline");
 const reviewDriftBody = document.getElementById("review-drift-body");
 const reviewDriftAccept = document.getElementById("review-drift-accept");
 const reviewDriftKeep = document.getElementById("review-drift-keep");
+const analyticsBtn = document.getElementById("analytics-btn");
+const analyticsView = document.getElementById("analytics-view");
+const analyticsBackBtn = document.getElementById("analytics-back-btn");
+const analyticsEmpty = document.getElementById("analytics-empty");
+const analyticsContent = document.getElementById("analytics-content");
+const analyticsTrendChart = document.getElementById("analytics-trend-chart");
+const analyticsRateBars = document.getElementById("analytics-rate-bars");
+const analyticsStreakTable = document.getElementById("analytics-streak-table");
 const reviewSetTargets = document.getElementById("review-set-targets");
 const reviewDone = document.getElementById("review-done");
 const welcomeModal = document.getElementById("welcome-modal");
@@ -70,6 +92,7 @@ const editNameInput = document.getElementById("edit-habit-input");
 const editTargetInput = document.getElementById("edit-target-input");
 const editPeriodValueInput = document.getElementById("edit-period-value-input");
 const editPeriodUnitInput = document.getElementById("edit-period-unit-input");
+const editRestAllowanceInput = document.getElementById("edit-rest-allowance-input");
 const editCancelBtn = document.getElementById("edit-cancel-btn");
 
 const historyModal = document.getElementById("history-modal");
@@ -80,6 +103,7 @@ const historyLongestStreak = document.getElementById("history-longest-streak");
 const historyTotal = document.getElementById("history-total");
 const historyRate = document.getElementById("history-rate");
 const historyHeatmap = document.getElementById("history-heatmap");
+const historyShareBtn = document.getElementById("history-share-btn");
 
 const accountBtn = document.getElementById("account-btn");
 const authModal = document.getElementById("auth-modal");
@@ -142,6 +166,32 @@ async function refreshHabitsCache() {
   } else {
     habitsCache = loadLocalHabits();
   }
+  await backfillMissingCreatedAt();
+}
+
+// Legacy habits created before `createdAt` existed get "today" as a fallback every load,
+// which resets the creation-anchored period grid (periodDaysLeft/previousPeriodWindow)
+// on every visit. Backfill once from the earliest completion (or today, if none) and
+// persist so it stabilizes.
+function backfillCreatedAt(habit) {
+  if (habit.createdAt) return false;
+  const sorted = [...habit.completions].sort();
+  habit.createdAt = sorted.length > 0 ? sorted[0] : todayKey();
+  return true;
+}
+
+async function backfillMissingCreatedAt() {
+  const needsSave = habitsCache.filter((h) => backfillCreatedAt(h));
+  if (needsSave.length === 0) return;
+  if (currentUser) {
+    await Promise.all(
+      needsSave.map((h) =>
+        supabaseClient.from("habits").update({ created_at: h.createdAt }).eq("id", h.id)
+      )
+    );
+  } else {
+    saveLocalHabits(habitsCache);
+  }
 }
 
 function loadName() {
@@ -184,6 +234,8 @@ function habitToRow(habit, userId) {
     completions: habit.completions,
     milestones_hit: habit.milestonesHit,
     rest_days: habit.restDays,
+    archived_at: habit.archivedAt || null,
+    rest_day_allowance: habit.restDayAllowance || 3,
   };
 }
 
@@ -198,6 +250,8 @@ function rowToHabit(row) {
     completions: row.completions || [],
     milestonesHit: row.milestones_hit || [],
     restDays: row.rest_days || [],
+    archivedAt: row.archived_at || null,
+    restDayAllowance: row.rest_day_allowance || 3,
   };
 }
 
@@ -355,10 +409,15 @@ function longestStreak(habit) {
 }
 
 // --- Rest days ---
-// 3 rest days per calendar month, per habit, derived — no stored counter.
+// A configurable number of rest days per calendar month, per habit (default 3), derived
+// from restDays — no stored counter.
 
 function currentYearMonth() {
   return todayKey().slice(0, 7);
+}
+
+function getRestDayAllowance(habit) {
+  return habit.restDayAllowance || 3;
 }
 
 function restDaysUsedThisMonth(habit) {
@@ -366,7 +425,7 @@ function restDaysUsedThisMonth(habit) {
 }
 
 function restDaysLeft(habit) {
-  return Math.max(0, 3 - restDaysUsedThisMonth(habit));
+  return Math.max(0, getRestDayAllowance(habit) - restDaysUsedThisMonth(habit));
 }
 
 // The current period-in-progress, anchored to the habit's creation date (since the
@@ -443,7 +502,9 @@ function heatmapLevel(count, fairShare) {
 }
 
 // Renders the 12-week map used on the main-list habit card into `container` — a CSS
-// grid of 9x9 cells, oldest first, with rest days grey and today ringed.
+// grid of 9x9 cells, oldest first, with rest days grey and today ringed. Blank/filled
+// past cells (not rested, not before the habit existed, not in the future) are clickable
+// to backfill or undo a completion for that specific day.
 function renderCardMap(container, habit) {
   container.innerHTML = "";
   const period = getPeriod(habit);
@@ -458,9 +519,29 @@ function renderCardMap(container, habit) {
     week.forEach(({ date, count }) => {
       const cell = document.createElement("span");
       const isRested = restDays.includes(date);
+      const beforeCreation = habit.createdAt && date < habit.createdAt;
       cell.className = isRested ? "map-cell rested" : `map-cell level-${heatmapLevel(count, fairShare)}`;
       if (date === today) cell.classList.add("today");
       cell.title = isRested ? `${date}: rested` : `${date}: ${count} completion${count === 1 ? "" : "s"}`;
+
+      if (!isRested && !beforeCreation) {
+        cell.classList.add("clickable");
+        cell.tabIndex = 0;
+        cell.setAttribute("role", "button");
+        cell.setAttribute(
+          "aria-label",
+          `${date}: ${count} completion${count === 1 ? "" : "s"}. ${count > 0 ? "Remove" : "Log"} a completion.`
+        );
+        const activate = () => toggleCompletionOnDate(habit.id, date);
+        cell.addEventListener("click", activate);
+        cell.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            activate();
+          }
+        });
+      }
+
       container.appendChild(cell);
     });
   });
@@ -509,7 +590,12 @@ function restOfferPeriodKey(habit, days) {
   return formatDate(previousPeriodWindow(habit, days));
 }
 
+// Picks the most-deserving candidate (largest current streak — same tie-break rule as
+// pickAtRiskHabit) rather than the first qualifying habit in array order, so which habit
+// gets the offer doesn't depend on add-order. A deficit of more than one day can be
+// repaired too, spending up to as many rest days as are both needed and available.
 function pickRestOfferHabit(habits) {
+  let best = null;
   for (const habit of habits) {
     const period = getPeriod(habit);
     const days = periodDays(period);
@@ -522,44 +608,65 @@ function pickRestOfferHabit(habits) {
     const alreadyRested = restDaysInWindow(restDays, prevWindowEnd, days) > 0;
     const deficit = target - prevCount;
     const key = `${habit.id}:${restOfferPeriodKey(habit, days)}`;
+    const available = restDaysLeft(habit);
 
-    if (
-      deficit === 1 &&
-      !alreadyRested &&
-      restDaysLeft(habit) > 0 &&
-      !dismissedRestOffers.has(key)
-    ) {
+    if (deficit >= 1 && !alreadyRested && available > 0 && !dismissedRestOffers.has(key)) {
       const windowStart = new Date(prevWindowEnd);
       windowStart.setDate(windowStart.getDate() - (days - 1));
-      let blankDate = null;
+      const need = Math.min(deficit, available);
+      const blankDates = [];
       for (let d = new Date(prevWindowEnd); d >= windowStart; d.setDate(d.getDate() - 1)) {
         const dateStr = formatDate(d);
-        if (countOnDate(habit.completions, dateStr) === 0) {
-          blankDate = dateStr;
-          break;
-        }
+        if (countOnDate(habit.completions, dateStr) === 0) blankDates.unshift(dateStr);
+        if (blankDates.length >= need) break;
       }
-      if (blankDate) {
-        return { habit, days, target, blankDate, windowStart, windowEnd: prevWindowEnd, key };
+      if (blankDates.length > 0) {
+        const streak = calcStreak(habit.completions, target, days, restDays);
+        if (!best || streak > best.streak) {
+          best = { habit, days, target, blankDates, windowStart, windowEnd: prevWindowEnd, key, streak };
+        }
       }
     }
   }
-  return null;
+  return best;
 }
 
-// Whether every habit's current period goal is already met today.
-function allHabitsMetToday(habits) {
+// Whether every habit's current period goal was actually met on the given date (no rest
+// days folded in — this is about what really happened that day, not streak leniency).
+function allHabitsMetOnDate(habits, date) {
   if (habits.length === 0) return false;
   return habits.every((habit) => {
     const period = getPeriod(habit);
     const days = periodDays(period);
     const target = getTarget(habit);
     const count =
-      days === 1
-        ? countOnDate(habit.completions, todayKey())
-        : countInWindow(habit.completions, new Date(), days);
+      days === 1 ? countOnDate(habit.completions, formatDate(date)) : countInWindow(habit.completions, date, days);
     return count >= target;
   });
+}
+
+function allHabitsMetToday(habits) {
+  return allHabitsMetOnDate(habits, new Date());
+}
+
+// Consecutive days ending today where every habit's goal was actually met — derived
+// retroactively from existing completions (no extra storage), analogous to
+// longestStreak()'s backward scan but per-day instead of per-period.
+function currentPerfectDayStreak(habits) {
+  if (habits.length === 0) return 0;
+  const earliestCreated = habits.reduce((min, h) => {
+    if (!h.createdAt) return min;
+    return !min || h.createdAt < min ? h.createdAt : min;
+  }, null);
+
+  let streak = 0;
+  const cursor = new Date();
+  while (!earliestCreated || formatDate(cursor) >= earliestCreated) {
+    if (!allHabitsMetOnDate(habits, cursor)) break;
+    streak++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
 }
 
 // Completion rate across all habits within the trailing 12-week (84-day) window, used
@@ -596,6 +703,7 @@ function updateHero(habits) {
     heroStatDone.textContent = "0/0";
     heroStatRate.textContent = "0%";
     heroStatRest.textContent = "0";
+    heroStatPerfect.textContent = "0";
     return;
   }
 
@@ -627,7 +735,10 @@ function updateHero(habits) {
   }).length;
   heroStatDone.textContent = `${doneToday}/${habits.length}`;
   heroStatRate.textContent = `${last12WeeksRate(habits)}%`;
-  heroStatRest.textContent = restDaysLeft(longestHabit);
+  // Total rest days left across all habits — each carries its own independent monthly
+  // budget, so a single habit's figure would read as global but wouldn't be one.
+  heroStatRest.textContent = habits.reduce((sum, h) => sum + restDaysLeft(h), 0);
+  heroStatPerfect.textContent = currentPerfectDayStreak(habits);
 }
 
 // --- Greeting ---
@@ -689,10 +800,18 @@ welcomeSkipBtn.addEventListener("click", () => {
 });
 
 // --- Theme ---
+// Simple line-icon SVGs instead of emoji, in line with the design system's no-emoji
+// treatment elsewhere (milestone toasts, etc.). currentColor picks up the button's own
+// color, which stays white regardless of theme since the hero band is always-ink.
+
+const MOON_ICON =
+  '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8.5 1.5a6.5 6.5 0 1 0 6 9.02A5.5 5.5 0 0 1 8.5 1.5z"/></svg>';
+const SUN_ICON =
+  '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3.2"/><path d="M8 1v1.6M8 13.4V15M15 8h-1.6M2.6 8H1M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1M12.6 12.6l-1.1-1.1M4.5 4.5l-1.1-1.1"/></svg>';
 
 function applyTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
-  themeToggle.textContent = theme === "dark" ? "☀️" : "🌙";
+  themeToggle.innerHTML = theme === "dark" ? SUN_ICON : MOON_ICON;
 }
 
 function initTheme() {
@@ -713,21 +832,24 @@ const WEEKDAY_ABBR = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 function renderOfferCard(offer) {
-  const { habit, days, target, blankDate, windowStart, windowEnd } = offer;
+  const { habit, days, target, blankDates, windowStart, windowEnd } = offer;
   const node = offerCardTemplate.content.cloneNode(true);
   const card = node.querySelector(".habit-card");
   card.dataset.id = habit.id;
 
   node.querySelector(".offer-habit-name").textContent = habit.name;
-  // The streak at stake — what spending the rest day would preserve, not the already-broken value.
-  const previewRestDays = [...(habit.restDays || []), blankDate];
+  // The streak at stake — what spending the rest day(s) would preserve, not the already-broken value.
+  const previewRestDays = [...(habit.restDays || []), ...blankDates];
   const streak = calcStreak(habit.completions, target, days, previewRestDays);
   node.querySelector(".offer-streak-numeral").textContent = streak;
   node.querySelector(".offer-streak-label").textContent = streak === 1 ? "day" : "days";
 
-  const blankWeekday = parseDateKey(blankDate).toLocaleDateString("en-US", { weekday: "long" });
+  const blankText =
+    blankDates.length === 1
+      ? `${parseDateKey(blankDates[0]).toLocaleDateString("en-US", { weekday: "long" })} is blank`
+      : `${blankDates.length} days blank`;
   node.querySelector(".offer-meta").textContent =
-    `${target}× every ${periodPhrase(getPeriod(habit))} · ${blankWeekday} is blank`;
+    `${target}× every ${periodPhrase(getPeriod(habit))} · ${blankText}`;
 
   const rail = node.querySelector(".offer-week-rail");
   for (let d = new Date(windowStart); d <= windowEnd; d.setDate(d.getDate() + 1)) {
@@ -736,7 +858,7 @@ function renderOfferCard(offer) {
     col.className = "offer-week-day";
     const block = document.createElement("div");
     const isDone = countOnDate(habit.completions, dateStr) > 0;
-    block.className = "offer-week-block" + (isDone ? " done" : "") + (dateStr === blankDate ? " repairable" : "");
+    block.className = "offer-week-block" + (isDone ? " done" : "") + (blankDates.includes(dateStr) ? " repairable" : "");
     const label = document.createElement("div");
     label.className = "offer-week-label";
     label.textContent = WEEKDAY_ABBR[d.getDay()];
@@ -745,7 +867,9 @@ function renderOfferCard(offer) {
     rail.appendChild(col);
   }
 
-  node.querySelector(".offer-use-btn").addEventListener("click", () => useRestDay(habit.id, offer));
+  const useBtn = node.querySelector(".offer-use-btn");
+  useBtn.textContent = blankDates.length === 1 ? "Use a rest day" : `Use ${blankDates.length} rest days`;
+  useBtn.addEventListener("click", () => useRestDay(habit.id, offer));
   node.querySelector(".offer-reset-btn").addEventListener("click", () => {
     dismissedRestOffers.add(offer.key);
     render();
@@ -755,10 +879,12 @@ function renderOfferCard(offer) {
 }
 
 function render() {
-  const habits = loadHabits();
+  const allHabits = loadHabits();
+  const habits = allHabits.filter((h) => !h.archivedAt);
+  const archived = allHabits.filter((h) => h.archivedAt);
   list.innerHTML = "";
 
-  emptyState.style.display = habits.length === 0 ? "block" : "none";
+  emptyState.style.display = habits.length === 0 && archived.length === 0 ? "block" : "none";
 
   updateHero(habits);
 
@@ -766,7 +892,17 @@ function render() {
   const atRiskCandidates = restOffer ? habits.filter((h) => h.id !== restOffer.habit.id) : habits;
   const atRisk = pickAtRiskHabit(atRiskCandidates);
 
-  habits.forEach((habit) => {
+  // Pin the offer/at-risk card to the front so the most actionable card isn't buried
+  // below the fold — everything else keeps habitsCache's own order (drag-reorder controls
+  // that; see reorderHabitsFromDOM).
+  const ordered = [];
+  if (restOffer) ordered.push(restOffer.habit);
+  if (atRisk && (!restOffer || atRisk.habit.id !== restOffer.habit.id)) ordered.push(atRisk.habit);
+  habits.forEach((h) => {
+    if (!ordered.some((oh) => oh.id === h.id)) ordered.push(h);
+  });
+
+  ordered.forEach((habit) => {
     if (restOffer && restOffer.habit.id === habit.id) {
       list.appendChild(renderOfferCard(restOffer));
       return;
@@ -775,6 +911,12 @@ function render() {
     const node = cardTemplate.content.cloneNode(true);
     const card = node.querySelector(".habit-card");
     card.dataset.id = habit.id;
+    card.draggable = true;
+    card.addEventListener("dragstart", () => card.classList.add("dragging"));
+    card.addEventListener("dragend", () => {
+      card.classList.remove("dragging");
+      reorderHabitsFromDOM();
+    });
 
     const isAtRisk = atRisk && atRisk.habit.id === habit.id;
     card.classList.toggle("at-risk", !!isAtRisk);
@@ -845,11 +987,107 @@ function render() {
     undoBtn.addEventListener("click", () => undoLast(habit.id));
 
     node.querySelector(".edit-btn").addEventListener("click", () => openEditModal(habit.id));
+    node.querySelector(".archive-btn").addEventListener("click", () => archiveHabit(habit.id));
     node.querySelector(".delete-btn").addEventListener("click", () => deleteHabit(habit.id));
 
     list.appendChild(node);
   });
+
+  renderArchivedSection(archived);
 }
+
+// --- Drag-to-reorder ---
+// Native HTML5 drag-and-drop. dragover live-reinserts the dragged card as the pointer
+// moves; dragend reads the final DOM order back into habitsCache and persists it.
+
+function getDragAfterElement(container, y) {
+  const cards = [...container.querySelectorAll(".habit-card:not(.dragging)")];
+  return cards.reduce(
+    (closest, child) => {
+      const box = child.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > closest.offset) return { offset, element: child };
+      return closest;
+    },
+    { offset: -Infinity, element: null }
+  ).element;
+}
+
+list.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  const dragging = list.querySelector(".dragging");
+  if (!dragging) return;
+  const afterElement = getDragAfterElement(list, e.clientY);
+  if (afterElement == null) list.appendChild(dragging);
+  else list.insertBefore(dragging, afterElement);
+});
+
+async function reorderHabitsFromDOM() {
+  const ids = [...list.querySelectorAll(".habit-card")].map((c) => c.dataset.id);
+  const reordered = ids.map((id) => habitsCache.find((h) => h.id === id)).filter(Boolean);
+  const missing = habitsCache.filter((h) => !ids.includes(h.id));
+  const newOrder = [...reordered, ...missing];
+  const changed = newOrder.some((h, i) => h.id !== habitsCache[i]?.id);
+  habitsCache = newOrder;
+  if (!changed) return;
+  render();
+  await persistPositions();
+}
+
+// --- Archive ---
+
+async function archiveHabit(id) {
+  const habit = habitsCache.find((h) => h.id === id);
+  if (!habit) return;
+  habit.archivedAt = new Date().toISOString();
+  render();
+
+  if (currentUser) {
+    const { error } = await supabaseClient
+      .from("habits")
+      .update({ archived_at: habit.archivedAt })
+      .eq("id", id);
+    if (error) showSyncError(`Couldn't archive "${habit.name}" — ${error.message}`);
+  } else {
+    saveLocalHabits(habitsCache);
+  }
+}
+
+async function unarchiveHabit(id) {
+  const habit = habitsCache.find((h) => h.id === id);
+  if (!habit) return;
+  habit.archivedAt = null;
+  render();
+
+  if (currentUser) {
+    const { error } = await supabaseClient.from("habits").update({ archived_at: null }).eq("id", id);
+    if (error) showSyncError(`Couldn't unarchive "${habit.name}" — ${error.message}`);
+  } else {
+    saveLocalHabits(habitsCache);
+  }
+}
+
+function renderArchivedSection(archived) {
+  archivedSection.hidden = archived.length === 0;
+  archivedCount.textContent = archived.length;
+  archivedList.innerHTML = "";
+
+  archived.forEach((habit) => {
+    const node = archivedRowTemplate.content.cloneNode(true);
+    node.querySelector(".archived-row-name").textContent = habit.name;
+    node
+      .querySelector(".archived-unarchive-btn")
+      .addEventListener("click", () => unarchiveHabit(habit.id));
+    node.querySelector(".archived-delete-btn").addEventListener("click", () => deleteHabit(habit.id));
+    archivedList.appendChild(node);
+  });
+}
+
+archivedToggle.addEventListener("click", () => {
+  const expanded = archivedToggle.getAttribute("aria-expanded") === "true";
+  archivedToggle.setAttribute("aria-expanded", String(!expanded));
+  archivedList.hidden = expanded;
+});
 
 // --- Actions ---
 
@@ -864,6 +1102,8 @@ async function addHabit(name, target, periodValue, periodUnit) {
     completions: [],
     milestonesHit: [],
     restDays: [],
+    archivedAt: null,
+    restDayAllowance: 3,
   };
   habitsCache.push(habit);
   render();
@@ -906,10 +1146,17 @@ function showUndoToast(habit, index) {
   undoBtn.textContent = "Undo";
   undoBtn.addEventListener("click", () => restoreHabit(habit.id));
 
+  const progress = document.createElement("div");
+  progress.className = "undo-toast-progress";
+
   toast.appendChild(label);
   toast.appendChild(undoBtn);
+  toast.appendChild(progress);
   toastStack.appendChild(toast);
-  requestAnimationFrame(() => toast.classList.add("visible"));
+  requestAnimationFrame(() => {
+    toast.classList.add("visible");
+    requestAnimationFrame(() => progress.classList.add("counting"));
+  });
 
   const timeoutId = setTimeout(() => dismissUndoToast(habit.id), 5000);
   pendingDeletes.set(habit.id, { habit, index, timeoutId, toastEl: toast });
@@ -928,10 +1175,31 @@ async function restoreHabit(id) {
 
   if (currentUser) {
     const { error } = await supabaseClient.from("habits").insert(habitToRow(pending.habit, currentUser.id));
-    if (error) showSyncError(`Couldn't restore "${pending.habit.name}" — ${error.message}`);
+    if (error) {
+      showSyncError(`Couldn't restore "${pending.habit.name}" — ${error.message}`);
+      return;
+    }
+    // `position` is a DB identity column, so the insert above always appends the row at
+    // the end regardless — realign every row's position to match the splice-back-into-place
+    // order above.
+    await persistPositions();
   } else {
     saveLocalHabits(habitsCache);
   }
+}
+
+// Shared by drag-reorder and restoreHabit: writes habitsCache's current array order back
+// as each row's `position` (a DB-only identity column the app never reads).
+async function persistPositions() {
+  if (!currentUser) {
+    saveLocalHabits(habitsCache);
+    return;
+  }
+  const results = await Promise.all(
+    habitsCache.map((h, i) => supabaseClient.from("habits").update({ position: i }).eq("id", h.id))
+  );
+  const failed = results.find((r) => r.error);
+  if (failed) showSyncError(`Couldn't save the new order — ${failed.error.message}`);
 }
 
 function dismissUndoToast(id) {
@@ -1020,15 +1288,46 @@ async function undoLast(id) {
   await persistHabitFields(habit);
 }
 
-// Spends one of the habit's monthly rest days to fill the blank period identified by
-// pickRestOfferHabit, keeping the streak alive without counting as a real completion.
+// Spends one or more of the habit's monthly rest days to fill the blank day(s) identified
+// by pickRestOfferHabit, keeping the streak alive without counting as a real completion.
 async function useRestDay(id, offer) {
   const habit = habitsCache.find((h) => h.id === id);
   if (!habit) return;
 
   if (!habit.restDays) habit.restDays = [];
-  habit.restDays.push(offer.blankDate);
+  habit.restDays.push(...offer.blankDates);
   dismissedRestOffers.add(offer.key);
+
+  render();
+  await persistHabitFields(habit);
+}
+
+// Click-to-backfill: toggles a single completion on a past (or today's) day directly from
+// the card map — adds one if the day is blank, removes one if it already has any. Lets
+// users log a missed day without waiting for "today" to roll around.
+async function toggleCompletionOnDate(id, dateStr) {
+  const habit = habitsCache.find((h) => h.id === id);
+  if (!habit) return;
+  if ((habit.restDays || []).includes(dateStr)) return;
+  if (habit.createdAt && dateStr < habit.createdAt) return;
+  if (dateStr > todayKey()) return;
+
+  const count = countOnDate(habit.completions, dateStr);
+  if (count > 0) {
+    const idx = habit.completions.indexOf(dateStr);
+    if (idx !== -1) habit.completions.splice(idx, 1);
+  } else {
+    habit.completions.push(dateStr);
+    if (!habit.milestonesHit) habit.milestonesHit = [];
+    const days = periodDays(getPeriod(habit));
+    const newStreak = calcStreak(habit.completions, getTarget(habit), days, habit.restDays || []);
+    for (const m of STREAK_MILESTONES) {
+      if (newStreak >= m && !habit.milestonesHit.includes(m)) {
+        habit.milestonesHit.push(m);
+        celebrateMilestone(habit.name, m);
+      }
+    }
+  }
 
   render();
   await persistHabitFields(habit);
@@ -1048,6 +1347,7 @@ function openEditModal(id) {
   editTargetInput.value = getTarget(habit);
   editPeriodValueInput.value = period.value;
   editPeriodUnitInput.value = period.unit;
+  editRestAllowanceInput.value = getRestDayAllowance(habit);
   editModal.classList.add("visible");
   editNameInput.focus();
 }
@@ -1058,18 +1358,21 @@ function closeEditModal() {
 }
 
 // Shared by the edit-habit modal and the weekly review's drifting-cadence accept action.
-async function saveHabitEdits(habit, { name, target, periodValue, periodUnit }) {
+// restDayAllowance is optional — the drift-accept path only changes cadence and leaves it
+// untouched.
+async function saveHabitEdits(habit, { name, target, periodValue, periodUnit, restDayAllowance }) {
   habit.name = name;
   habit.target = target;
   habit.periodValue = periodValue;
   habit.periodUnit = periodUnit;
+  if (restDayAllowance !== undefined) habit.restDayAllowance = restDayAllowance;
   render();
 
+  const update = { name, target, period_value: periodValue, period_unit: periodUnit };
+  if (restDayAllowance !== undefined) update.rest_day_allowance = restDayAllowance;
+
   if (currentUser) {
-    const { error } = await supabaseClient
-      .from("habits")
-      .update({ name, target, period_value: periodValue, period_unit: periodUnit })
-      .eq("id", habit.id);
+    const { error } = await supabaseClient.from("habits").update(update).eq("id", habit.id);
     if (error) showSyncError(`Couldn't save changes to "${name}" — ${error.message}`);
   } else {
     saveLocalHabits(habitsCache);
@@ -1087,12 +1390,13 @@ editForm.addEventListener("submit", async (e) => {
   const periodUnit = ["day", "week", "month"].includes(editPeriodUnitInput.value)
     ? editPeriodUnitInput.value
     : "day";
+  const restDayAllowance = Math.max(0, parseInt(editRestAllowanceInput.value, 10) || 0);
 
   const habit = habitsCache.find((h) => h.id === editingId);
   closeEditModal();
   if (!habit) return;
 
-  await saveHabitEdits(habit, { name, target, periodValue, periodUnit });
+  await saveHabitEdits(habit, { name, target, periodValue, periodUnit, restDayAllowance });
 });
 
 editCancelBtn.addEventListener("click", closeEditModal);
@@ -1102,6 +1406,8 @@ editModal.addEventListener("click", (e) => {
 
 // --- Habit history ---
 
+let currentHistoryHabitId = null;
+
 function openHistoryModal(id) {
   const habit = loadHabits().find((h) => h.id === id);
   if (!habit) return;
@@ -1110,6 +1416,7 @@ function openHistoryModal(id) {
   const days = periodDays(period);
   const target = getTarget(habit);
 
+  currentHistoryHabitId = id;
   historyHabitName.textContent = habit.name;
   historyCurrentStreak.textContent = calcStreak(habit.completions, target, days, habit.restDays || []);
   historyLongestStreak.textContent = longestStreak(habit);
@@ -1122,6 +1429,92 @@ function openHistoryModal(id) {
 
 function closeHistoryModal() {
   historyModal.classList.remove("visible");
+}
+
+// Rasterizes a habit's 12-week map + streak numeral to a downloadable PNG for sharing.
+// Mirrors the "always ink" at-risk card treatment (solid accent for any filled level,
+// no per-level shading) since it's the same kind of standalone dark surface.
+async function shareHabitImage(id) {
+  const habit = habitsCache.find((h) => h.id === id);
+  if (!habit) return;
+  if (document.fonts?.ready) await document.fonts.ready;
+
+  const period = getPeriod(habit);
+  const days = periodDays(period);
+  const target = getTarget(habit);
+  const fairShare = target / days;
+  const restDays = habit.restDays || [];
+  const streak = calcStreak(habit.completions, target, days, restDays);
+  const weeksData = buildHeatmap(habit.completions, 12);
+
+  const W = 600;
+  const H = 340;
+  const scale = 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = W * scale;
+  canvas.height = H * scale;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(scale, scale);
+
+  ctx.fillStyle = "#201515";
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.fillStyle = "#fffefb";
+  ctx.font = "600 26px Inter, sans-serif";
+  ctx.fillText(habit.name, 32, 52);
+
+  ctx.fillStyle = "#ff4f00";
+  ctx.font = "500 56px Inter, sans-serif";
+  const streakText = String(streak);
+  ctx.fillText(streakText, 32, 118);
+  const streakWidth = ctx.measureText(streakText).width;
+
+  ctx.fillStyle = "#939084";
+  ctx.font = "400 16px Inter, sans-serif";
+  ctx.fillText(streak === 1 ? "day streak" : "days unbroken", 32 + streakWidth + 12, 118);
+  ctx.font = "400 14px Inter, sans-serif";
+  ctx.fillText(`${target}× every ${periodPhrase(period)}`, 32, 144);
+
+  const cellSize = 12;
+  const gap = 3;
+  const startX = 32;
+  const startY = 170;
+  weeksData.forEach((week, wi) => {
+    week.forEach(({ date, count }, di) => {
+      const isRested = restDays.includes(date);
+      const level = heatmapLevel(count, fairShare);
+      let color = "rgba(255,255,255,0.1)";
+      if (isRested) color = "#939084";
+      else if (level > 0) color = "#ff6a24";
+      ctx.fillStyle = color;
+      const x = startX + wi * (cellSize + gap);
+      const y = startY + di * (cellSize + gap);
+      if (ctx.roundRect) {
+        ctx.beginPath();
+        ctx.roundRect(x, y, cellSize, cellSize, 2);
+        ctx.fill();
+      } else {
+        ctx.fillRect(x, y, cellSize, cellSize);
+      }
+    });
+  });
+
+  ctx.fillStyle = "#939084";
+  ctx.font = "500 13px Inter, sans-serif";
+  ctx.textAlign = "right";
+  ctx.fillText("Daily Streak", W - 32, H - 24);
+  ctx.textAlign = "left";
+
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const slug = habit.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    a.download = `${slug || "habit"}-streak.png`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
 }
 
 function renderHeatmap(habit) {
@@ -1145,6 +1538,10 @@ function renderHeatmap(habit) {
   });
 }
 
+historyShareBtn.addEventListener("click", () => {
+  if (currentHistoryHabitId) shareHabitImage(currentHistoryHabitId);
+});
+
 historyCloseBtn.addEventListener("click", closeHistoryModal);
 historyModal.addEventListener("click", (e) => {
   if (e.target === historyModal) closeHistoryModal();
@@ -1160,28 +1557,24 @@ function celebrate(id) {
   card.addEventListener("animationend", () => card.classList.remove("celebrate"), { once: true });
 }
 
-function celebrateMilestone(habitName, days) {
+// Both milestone and perfect-day toasts route through the shared toastStack (same queue
+// undo/error toasts use) so two firing on the same markDone() call stack instead of
+// rendering on top of each other.
+function showMilestoneToast(message, duration) {
   const toast = document.createElement("div");
   toast.className = "milestone-toast";
-  toast.textContent = `${days}-day streak on "${habitName}"!`;
-  document.body.appendChild(toast);
-  setTimeout(() => toast.classList.add("visible"));
-  setTimeout(() => {
-    toast.classList.remove("visible");
-    setTimeout(() => toast.remove(), 300);
-  }, 2600);
+  toast.textContent = message;
+  toastStack.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add("visible"));
+  setTimeout(() => removeToast(toast), duration);
+}
+
+function celebrateMilestone(habitName, days) {
+  showMilestoneToast(`${days}-day streak on "${habitName}"!`, 2600);
 }
 
 function celebratePerfectDay(habitCount) {
-  const toast = document.createElement("div");
-  toast.className = "milestone-toast";
-  toast.textContent = `Perfect day! All ${habitCount} habit${habitCount === 1 ? "" : "s"} complete`;
-  document.body.appendChild(toast);
-  setTimeout(() => toast.classList.add("visible"));
-  setTimeout(() => {
-    toast.classList.remove("visible");
-    setTimeout(() => toast.remove(), 300);
-  }, 3200);
+  showMilestoneToast(`Perfect day! All ${habitCount} habit${habitCount === 1 ? "" : "s"} complete`, 3200);
 }
 
 // --- Backup & restore ---
@@ -1202,19 +1595,55 @@ function exportData() {
   URL.revokeObjectURL(url);
 }
 
+// Coerces one imported habit into a valid shape, dropping/defaulting anything malformed
+// instead of trusting the file wholesale — a hand-edited or corrupted backup shouldn't be
+// able to crash render()/countInWindow or get pushed straight to Supabase. Returns null
+// for anything unsalvageable (no usable name).
+function sanitizeImportedHabit(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  if (typeof raw.name !== "string" || !raw.name.trim()) return null;
+
+  const isDateArray = (v) =>
+    Array.isArray(v) && v.every((d) => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d));
+  const isDateStr = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
+
+  return {
+    id: typeof raw.id === "string" && raw.id ? raw.id : crypto.randomUUID(),
+    name: raw.name.trim().slice(0, 60),
+    target: Number.isInteger(raw.target) && raw.target > 0 ? raw.target : 1,
+    periodValue: Number.isInteger(raw.periodValue) && raw.periodValue > 0 ? raw.periodValue : 1,
+    periodUnit: ["day", "week", "month"].includes(raw.periodUnit) ? raw.periodUnit : "day",
+    createdAt: isDateStr(raw.createdAt) ? raw.createdAt : null,
+    completions: isDateArray(raw.completions) ? raw.completions : [],
+    milestonesHit: Array.isArray(raw.milestonesHit) ? raw.milestonesHit.filter((n) => typeof n === "number") : [],
+    restDays: isDateArray(raw.restDays) ? raw.restDays : [],
+    archivedAt: isDateStr(raw.archivedAt) || typeof raw.archivedAt === "string" ? raw.archivedAt : null,
+    restDayAllowance: Number.isInteger(raw.restDayAllowance) && raw.restDayAllowance >= 0 ? raw.restDayAllowance : 3,
+  };
+}
+
 function importData(file) {
   const reader = new FileReader();
   reader.onload = async () => {
     try {
       const data = JSON.parse(reader.result);
       if (!Array.isArray(data.habits)) throw new Error("Invalid backup file");
+
+      const sanitized = data.habits.map(sanitizeImportedHabit).filter(Boolean);
+      const skipped = data.habits.length - sanitized.length;
+      if (sanitized.length === 0 && data.habits.length > 0) {
+        throw new Error("No valid habits found in that backup file");
+      }
+
       const ok = confirm(
         `This will replace your current ${habitsCache.length} habit(s) with ` +
-          `${data.habits.length} habit(s) from the backup. Continue?`
+          `${sanitized.length} habit(s) from the backup` +
+          `${skipped > 0 ? ` (${skipped} skipped — unreadable data)` : ""}. Continue?`
       );
       if (!ok) return;
 
-      habitsCache = data.habits;
+      habitsCache = sanitized;
+      await backfillMissingCreatedAt();
       render();
 
       if (currentUser) {
@@ -1248,10 +1677,12 @@ function isoWeekNumber(date) {
   return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
 }
 
-function getReviewWeekRange() {
+// offset 0 = the most recently completed week, 1 = the week before that, etc. Completions
+// are retained indefinitely, so nothing about the underlying data limits this to "now."
+function getReviewWeekRange(offset = 0) {
   const today = new Date();
   const weekEnd = new Date(today);
-  weekEnd.setDate(weekEnd.getDate() - today.getDay());
+  weekEnd.setDate(weekEnd.getDate() - today.getDay() - offset * 7);
   const weekStart = new Date(weekEnd);
   weekStart.setDate(weekStart.getDate() - 6);
   return { weekStart, weekEnd };
@@ -1374,11 +1805,15 @@ function computeDrift(habits) {
 }
 
 let currentDrift = null;
+let reviewWeekOffset = 0;
 
 function renderWeeklyReview() {
-  const habits = loadHabits();
-  const { weekStart, weekEnd } = getReviewWeekRange();
+  const habits = loadHabits().filter((h) => !h.archivedAt);
+  const { weekStart, weekEnd } = getReviewWeekRange(reviewWeekOffset);
   const rows = computeWeeklyReviewRows(habits, weekStart, weekEnd);
+
+  reviewPrevBtn.disabled = false;
+  reviewNextBtn.disabled = reviewWeekOffset === 0;
 
   reviewEyebrow.textContent = `Week ${isoWeekNumber(weekEnd)} · ${formatReviewDateRange(weekStart, weekEnd)}`;
   reviewHeadline.textContent = reviewHeadlineText(rows);
@@ -1408,7 +1843,9 @@ function renderWeeklyReview() {
   reviewTile2Value.textContent = tiles.tile2Value;
   reviewTile2Label.textContent = tiles.tile2Label;
 
-  currentDrift = computeDrift(habits);
+  // Drift detection is about current pacing, not a past week's data — only show it on
+  // the most recently completed week.
+  currentDrift = reviewWeekOffset === 0 ? computeDrift(habits) : null;
   if (currentDrift) {
     const { habit, suggestedValue, suggestedUnit } = currentDrift;
     const suggestedUnitWord = suggestedValue === 1 ? suggestedUnit : `${suggestedUnit}s`;
@@ -1425,6 +1862,7 @@ function renderWeeklyReview() {
 }
 
 function openWeeklyReview() {
+  reviewWeekOffset = 0;
   renderWeeklyReview();
   mainView.style.display = "none";
   weeklyReviewView.classList.add("visible");
@@ -1440,6 +1878,17 @@ reviewBtn.addEventListener("click", openWeeklyReview);
 reviewBackBtn.addEventListener("click", closeWeeklyReview);
 reviewDone.addEventListener("click", closeWeeklyReview);
 reviewSetTargets.addEventListener("click", closeWeeklyReview);
+
+reviewPrevBtn.addEventListener("click", () => {
+  reviewWeekOffset += 1;
+  renderWeeklyReview();
+});
+
+reviewNextBtn.addEventListener("click", () => {
+  if (reviewWeekOffset === 0) return;
+  reviewWeekOffset -= 1;
+  renderWeeklyReview();
+});
 
 reviewDriftAccept.addEventListener("click", async () => {
   if (!currentDrift) return;
@@ -1472,6 +1921,13 @@ function closeAddHabitForm() {
 }
 
 addHabitToggle.addEventListener("click", openAddHabitForm);
+
+document.querySelectorAll(".habit-chip").forEach((chip) => {
+  chip.addEventListener("click", () => {
+    input.value = chip.dataset.name;
+    input.focus();
+  });
+});
 
 form.addEventListener("submit", (e) => {
   e.preventDefault();
@@ -1626,6 +2082,245 @@ googleAuthBtn.addEventListener("click", () => {
   });
 });
 
+// --- Realtime sync ---
+// Keeps two tabs/devices signed into the same account from silently diverging: subscribes
+// to this user's rows on the habits table and merges inbound changes into habitsCache.
+// A write this tab made will also round-trip back here — that just reapplies data we
+// already have, an acceptable no-op rather than tracking in-flight writes to suppress it.
+
+let realtimeChannel = null;
+
+function subscribeRealtime() {
+  unsubscribeRealtime();
+  if (!currentUser) return;
+  realtimeChannel = supabaseClient
+    .channel(`habits-${currentUser.id}`)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "habits", filter: `user_id=eq.${currentUser.id}` },
+      handleRealtimeChange
+    )
+    .subscribe();
+}
+
+function unsubscribeRealtime() {
+  if (realtimeChannel) {
+    supabaseClient.removeChannel(realtimeChannel);
+    realtimeChannel = null;
+  }
+}
+
+function handleRealtimeChange(payload) {
+  if (payload.eventType === "INSERT") {
+    if (!habitsCache.some((h) => h.id === payload.new.id)) {
+      habitsCache.push(rowToHabit(payload.new));
+      render();
+    }
+  } else if (payload.eventType === "UPDATE") {
+    const idx = habitsCache.findIndex((h) => h.id === payload.new.id);
+    if (idx !== -1) {
+      habitsCache[idx] = rowToHabit(payload.new);
+      render();
+    }
+  } else if (payload.eventType === "DELETE") {
+    const idx = habitsCache.findIndex((h) => h.id === payload.old.id);
+    if (idx !== -1) {
+      habitsCache.splice(idx, 1);
+      render();
+    }
+  }
+}
+
+// --- Analytics / insights ---
+// A trends screen over the full retained history — completions retained indefinitely, so
+// this reads existing data rather than needing new storage. Charts are hand-drawn SVG/DOM
+// (no charting library — no bundler to load one with) and stick to the single-accent,
+// sequential-shading palette used everywhere else.
+
+function computeWeeklyTrend(habits, weeks = 12) {
+  const end = new Date();
+  end.setHours(0, 0, 0, 0);
+  const buckets = [];
+  for (let w = weeks - 1; w >= 0; w--) {
+    const weekEnd = new Date(end);
+    weekEnd.setDate(weekEnd.getDate() - w * 7);
+    let count = 0;
+    habits.forEach((h) => {
+      count += countInWindow(h.completions, weekEnd, 7);
+    });
+    buckets.push({ weekEnd, count });
+  }
+  return buckets;
+}
+
+function renderTrendChart(container, buckets) {
+  container.innerHTML = "";
+  const max = Math.max(1, ...buckets.map((b) => b.count));
+  const w = 600;
+  const h = 160;
+  const gap = 4;
+  const barWidth = (w - gap * (buckets.length - 1)) / buckets.length;
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  svg.setAttribute("class", "trend-chart-svg");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", `Completions per week over the last ${buckets.length} weeks`);
+
+  buckets.forEach((b, i) => {
+    const barH = Math.max((b.count / max) * (h - 24), b.count > 0 ? 2 : 0);
+    const x = i * (barWidth + gap);
+    const y = h - barH - 20;
+    const rect = document.createElementNS(svgNS, "rect");
+    rect.setAttribute("x", x);
+    rect.setAttribute("y", y);
+    rect.setAttribute("width", barWidth);
+    rect.setAttribute("height", barH);
+    rect.setAttribute("rx", 2);
+    rect.setAttribute("class", "trend-bar");
+    const title = document.createElementNS(svgNS, "title");
+    title.textContent = `Week of ${formatDate(b.weekEnd)}: ${b.count} completion${b.count === 1 ? "" : "s"}`;
+    rect.appendChild(title);
+    svg.appendChild(rect);
+  });
+
+  container.appendChild(svg);
+}
+
+function renderRateBars(container, habits) {
+  container.innerHTML = "";
+  habits.forEach((habit) => {
+    const row = document.createElement("div");
+    row.className = "analytics-rate-row";
+
+    const label = document.createElement("div");
+    label.className = "analytics-rate-label";
+    label.textContent = habit.name;
+
+    const track = document.createElement("div");
+    track.className = "analytics-rate-track";
+    const fill = document.createElement("div");
+    fill.className = "analytics-rate-fill";
+    const rate = completionRate(habit);
+    fill.style.width = `${rate}%`;
+    track.appendChild(fill);
+
+    const value = document.createElement("div");
+    value.className = "analytics-rate-value";
+    value.textContent = `${rate}%`;
+
+    row.appendChild(label);
+    row.appendChild(track);
+    row.appendChild(value);
+    container.appendChild(row);
+  });
+}
+
+function renderStreakTable(container, habits) {
+  container.innerHTML = "";
+  const sorted = [...habits].sort((a, b) => longestStreak(b) - longestStreak(a));
+
+  sorted.forEach((habit) => {
+    const period = getPeriod(habit);
+    const days = periodDays(period);
+    const row = document.createElement("div");
+    row.className = "analytics-streak-row";
+
+    const name = document.createElement("span");
+    name.className = "analytics-streak-name";
+    name.textContent = habit.name;
+
+    const current = document.createElement("span");
+    current.className = "analytics-streak-figure";
+    current.textContent = `${calcStreak(habit.completions, getTarget(habit), days, habit.restDays || [])} current`;
+
+    const longest = document.createElement("span");
+    longest.className = "analytics-streak-figure";
+    longest.textContent = `${longestStreak(habit)} longest`;
+
+    const total = document.createElement("span");
+    total.className = "analytics-streak-figure";
+    total.textContent = `${totalCompletions(habit)} total`;
+
+    row.appendChild(name);
+    row.appendChild(current);
+    row.appendChild(longest);
+    row.appendChild(total);
+    container.appendChild(row);
+  });
+}
+
+function renderAnalytics() {
+  const habits = loadHabits().filter((h) => !h.archivedAt);
+  // .empty-state sets display:none unconditionally (matching the main empty-state's own
+  // pattern) — an inline style, not the hidden attribute, is what has to override it.
+  analyticsEmpty.style.display = habits.length > 0 ? "none" : "block";
+  analyticsContent.hidden = habits.length === 0;
+  if (habits.length === 0) return;
+
+  renderTrendChart(analyticsTrendChart, computeWeeklyTrend(habits, 12));
+  renderRateBars(analyticsRateBars, habits);
+  renderStreakTable(analyticsStreakTable, habits);
+}
+
+function openAnalytics() {
+  renderAnalytics();
+  mainView.style.display = "none";
+  analyticsView.classList.add("visible");
+  window.scrollTo(0, 0);
+}
+
+function closeAnalytics() {
+  analyticsView.classList.remove("visible");
+  mainView.style.display = "";
+}
+
+analyticsBtn.addEventListener("click", openAnalytics);
+analyticsBackBtn.addEventListener("click", closeAnalytics);
+
+// --- Modal accessibility ---
+// Escape closes the topmost visible modal (only for the ones with a genuine cancel
+// action — welcome/name are mandatory onboarding steps with no neutral "just close").
+// Tab is trapped inside whichever modal is visible, matching standard dialog behavior.
+
+const ALL_MODALS = [welcomeModal, nameModal, editModal, historyModal, authModal];
+const MODAL_CLOSERS = new Map([
+  [editModal, closeEditModal],
+  [historyModal, closeHistoryModal],
+  [authModal, closeAuthModal],
+]);
+
+function getVisibleModal() {
+  return ALL_MODALS.find((m) => m.classList.contains("visible")) || null;
+}
+
+function trapFocus(modal, e) {
+  const focusable = modal.querySelectorAll(
+    'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
+  );
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
+}
+
+document.addEventListener("keydown", (e) => {
+  const modal = getVisibleModal();
+  if (!modal) return;
+  if (e.key === "Escape") {
+    const closeFn = MODAL_CLOSERS.get(modal);
+    if (closeFn) closeFn();
+  } else if (e.key === "Tab") {
+    trapFocus(modal, e);
+  }
+});
+
 // --- Bootstrap ---
 
 initTheme();
@@ -1666,6 +2361,7 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
   updateAccountButton();
   renderGreeting();
   render();
+  subscribeRealtime();
 
   if (!authBootstrapped) {
     authBootstrapped = true;

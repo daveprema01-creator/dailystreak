@@ -3,7 +3,9 @@
   --card-bg: #f8f4f0;
   --text: #201515;
   --text-muted: #605d52;
-  --text-faint: #939084;
+  /* Darker than the dark-mode value on purpose — #939084 on this light card-bg measures
+     ~2.9:1, well under WCAG AA's 4.5:1 for the 14px captions it's used on. */
+  --text-faint: #6b665a;
   --on-accent: #fffefb;
   --accent: #ff4f00;
   --accent-hover: #e04600;
@@ -1139,11 +1141,10 @@ body {
   border-color: var(--accent);
 }
 
+/* Flows inside #toast-stack (below) rather than using its own fixed position, so a
+   milestone and a perfect-day toast firing together stack instead of rendering on top of
+   each other. */
 .milestone-toast {
-  position: fixed;
-  top: 24px;
-  left: 50%;
-  transform: translate(-50%, -12px);
   background: var(--accent);
   color: var(--on-accent);
   padding: 12px 20px;
@@ -1151,15 +1152,15 @@ body {
   font-weight: 600;
   box-shadow: var(--shadow-hover);
   opacity: 0;
-  transition: opacity 0.3s ease, transform 0.3s ease;
-  z-index: 21;
+  transform: translateY(8px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
   text-align: center;
   max-width: calc(100vw - 40px);
 }
 
 .milestone-toast.visible {
   opacity: 1;
-  transform: translate(-50%, 0);
+  transform: translateY(0);
 }
 
 .toast-stack {
@@ -1559,6 +1560,413 @@ body {
   color: var(--accent);
 }
 
+/* --- Accessibility: skip link --- */
+
+.skip-link {
+  position: absolute;
+  top: -48px;
+  left: 12px;
+  z-index: 30;
+  background: var(--accent);
+  color: var(--on-accent);
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: top 0.15s ease;
+}
+
+.skip-link:focus {
+  top: 12px;
+}
+
+/* --- Card map: clickable backfill cells --- */
+
+.map-cell.clickable {
+  cursor: pointer;
+}
+
+.map-cell.clickable:hover {
+  box-shadow: 0 0 0 1px var(--text-faint);
+}
+
+.map-cell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* --- Drag-to-reorder --- */
+
+.habit-card[draggable="true"] {
+  cursor: grab;
+}
+
+.habit-card.dragging {
+  opacity: 0.4;
+}
+
+/* --- Archive --- */
+
+.archive-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 0.8rem;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.archive-btn:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+
+.archived-section {
+  margin-top: 20px;
+}
+
+.archived-toggle {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.archived-toggle:hover {
+  color: var(--accent);
+}
+
+.archived-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+/* [hidden] and .archived-list{display:flex} tie on specificity — without this, source
+   order lets the flex rule win and the list stays visible while "hidden". */
+.archived-list[hidden] {
+  display: none;
+}
+
+.archived-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--card-bg);
+  color: var(--text-muted);
+}
+
+.archived-row-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.archived-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.archived-unarchive-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.archived-unarchive-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.archived-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 0.8rem;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.archived-delete-btn:hover {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+/* --- Undo toast progress bar --- */
+
+.undo-toast {
+  position: relative;
+  overflow: hidden;
+}
+
+.undo-toast-progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: 100%;
+  background: var(--accent);
+  transform: scaleX(1);
+  transform-origin: left;
+}
+
+.undo-toast-progress.counting {
+  transition: transform 5s linear;
+  transform: scaleX(0);
+}
+
+/* --- Edit-habit modal: rest-day allowance --- */
+
+.modal-rest-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.modal-rest-row input {
+  width: 56px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 0.85rem;
+  color: var(--text);
+  outline: none;
+  text-align: center;
+}
+
+.modal-rest-hint {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--text-faint);
+}
+
+/* --- Add-habit suggestion chips --- */
+
+.habit-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.habit-suggestions-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.habit-chip {
+  padding: 6px 12px;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.habit-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* --- Weekly review: week navigation --- */
+
+.review-eyebrow-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.review-week-nav {
+  display: flex;
+  gap: 6px;
+}
+
+.review-nav-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.review-nav-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.review-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* --- History modal: share as image --- */
+
+.history-share-btn {
+  display: block;
+  width: 100%;
+  margin-top: 16px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.history-share-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* --- Analytics / insights --- */
+
+.analytics-section {
+  margin-bottom: 32px;
+}
+
+.analytics-section-title {
+  margin: 0 0 16px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.analytics-trend-chart {
+  background: var(--card-bg);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.trend-chart-svg {
+  display: block;
+  width: 100%;
+  height: 160px;
+}
+
+.trend-bar {
+  fill: var(--accent);
+}
+
+.analytics-rate-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.analytics-rate-row {
+  display: grid;
+  grid-template-columns: 140px 1fr 48px;
+  align-items: center;
+  gap: 12px;
+}
+
+.analytics-rate-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analytics-rate-track {
+  height: 10px;
+  border-radius: 6px;
+  background: var(--border-soft);
+  overflow: hidden;
+}
+
+.analytics-rate-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 6px;
+}
+
+.analytics-rate-value {
+  text-align: right;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.analytics-streak-table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.analytics-streak-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.analytics-streak-row:first-child {
+  border-top: none;
+}
+
+.analytics-streak-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-right: auto;
+}
+
+.analytics-streak-figure {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
 /* --- Responsive --- */
 
 @media (max-width: 768px) {
@@ -1588,5 +1996,19 @@ body {
   .review-col-week {
     width: auto;
     flex: 1;
+  }
+
+  /* The hit/delta columns are already hidden above — the remaining content doesn't need
+     the desktop 480px floor, and enforcing it forces horizontal scroll on narrow phones. */
+  .review-table {
+    min-width: 0;
+  }
+
+  .analytics-rate-row {
+    grid-template-columns: 96px 1fr 40px;
+  }
+
+  .review-eyebrow-row {
+    flex-wrap: wrap;
   }
 }

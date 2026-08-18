@@ -4,22 +4,28 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Daily Streak</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icon-192.png" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <meta name="theme-color" content="#201515" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <a href="#main-content" class="skip-link">Skip to content</a>
   <div id="main-view" class="main-view">
     <header class="hero-band">
       <p id="greeting" class="greeting"></p>
       <div class="hero-top">
         <span class="hero-brand">Daily Streak</span>
-        <div class="hero-top-right">
+        <nav class="hero-top-right" aria-label="Account and view controls">
+          <button id="analytics-btn" class="hero-text-btn" type="button">Insights</button>
           <button id="review-btn" class="hero-text-btn" type="button">Weekly review</button>
           <button id="account-btn" class="account-btn" type="button">Sign in to sync</button>
           <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode">🌙</button>
-        </div>
+        </nav>
       </div>
       <div class="hero-main">
         <div class="hero-longest">
@@ -42,10 +48,15 @@
             <span class="hero-stat-value" id="hero-stat-rest">0</span>
             <span class="hero-stat-label">rest days left</span>
           </div>
+          <div class="hero-stat">
+            <span class="hero-stat-value" id="hero-stat-perfect">0</span>
+            <span class="hero-stat-label">perfect days</span>
+          </div>
         </div>
       </div>
     </header>
 
+    <main id="main-content">
     <div class="data-actions">
       <button id="export-btn" class="data-btn">Export backup</button>
       <button id="import-btn" class="data-btn">Import backup</button>
@@ -62,6 +73,13 @@
       <button id="add-habit-toggle" type="button" class="add-habit-toggle">+ Add a habit</button>
 
       <form id="add-habit-form" class="add-habit-form">
+        <div class="habit-suggestions" id="habit-suggestions">
+          <span class="habit-suggestions-label">Try:</span>
+          <button type="button" class="habit-chip" data-name="Drink water">Drink water</button>
+          <button type="button" class="habit-chip" data-name="Read">Read</button>
+          <button type="button" class="habit-chip" data-name="Exercise">Exercise</button>
+          <button type="button" class="habit-chip" data-name="Sleep 8 hours">Sleep 8 hours</button>
+        </div>
         <div class="add-habit-main">
           <input
             id="habit-input"
@@ -84,13 +102,27 @@
           </select>
         </div>
       </form>
+
+      <div id="archived-section" class="archived-section" hidden>
+        <button type="button" id="archived-toggle" class="archived-toggle" aria-expanded="false">
+          Archived (<span id="archived-count">0</span>)
+        </button>
+        <div id="archived-list" class="archived-list" hidden></div>
+      </div>
     </div>
+    </main>
   </div>
 
   <div id="weekly-review-view" class="weekly-review-view">
     <div class="review-inner">
       <button type="button" id="review-back-btn" class="review-back-btn">‹ Back</button>
-      <div class="review-eyebrow" id="review-eyebrow"></div>
+      <div class="review-eyebrow-row">
+        <div class="review-eyebrow" id="review-eyebrow"></div>
+        <div class="review-week-nav">
+          <button type="button" id="review-prev-btn" class="review-nav-btn" aria-label="Previous week">‹</button>
+          <button type="button" id="review-next-btn" class="review-nav-btn" aria-label="Next week">›</button>
+        </div>
+      </div>
       <h2 class="review-headline" id="review-headline"></h2>
       <p class="review-lead" id="review-lead"></p>
 
@@ -142,12 +174,41 @@
     </div>
   </div>
 
+  <div id="analytics-view" class="weekly-review-view">
+    <div class="review-inner">
+      <button type="button" id="analytics-back-btn" class="review-back-btn">‹ Back</button>
+      <div class="review-eyebrow">Insights</div>
+      <h2 class="review-headline">Trends across all habits</h2>
+      <p class="review-lead">See how your completions and streaks have moved over time.</p>
+
+      <p id="analytics-empty" class="empty-state" hidden>Add a habit to start building your insights.</p>
+
+      <div id="analytics-content">
+        <div class="analytics-section">
+          <h3 class="analytics-section-title">Completions per week · last 12 weeks</h3>
+          <div id="analytics-trend-chart" class="analytics-trend-chart"></div>
+        </div>
+
+        <div class="analytics-section">
+          <h3 class="analytics-section-title">Completion rate by habit</h3>
+          <div id="analytics-rate-bars" class="analytics-rate-bars"></div>
+        </div>
+
+        <div class="analytics-section">
+          <h3 class="analytics-section-title">Streaks</h3>
+          <div id="analytics-streak-table" class="analytics-streak-table"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <template id="habit-card-template">
     <div class="habit-card" data-id="">
       <div class="habit-card-title-row">
         <button type="button" class="habit-name" title="View history"></button>
         <div class="habit-card-controls">
           <button class="edit-btn" title="Edit habit" aria-label="Edit habit">✎</button>
+          <button class="archive-btn" title="Archive habit" aria-label="Archive habit">⏸</button>
           <button class="delete-btn" title="Delete habit" aria-label="Delete habit">✕</button>
           <span class="habit-streak-numeral"></span>
         </div>
@@ -181,6 +242,16 @@
     </div>
   </template>
 
+  <template id="archived-row-template">
+    <div class="archived-row">
+      <span class="archived-row-name"></span>
+      <div class="archived-row-actions">
+        <button type="button" class="archived-unarchive-btn">Unarchive</button>
+        <button type="button" class="archived-delete-btn" aria-label="Delete habit">✕</button>
+      </div>
+    </div>
+  </template>
+
   <template id="review-row-template">
     <div class="review-row">
       <div class="review-col-habit">
@@ -196,7 +267,7 @@
   </template>
 
   <div id="welcome-modal" class="modal-overlay">
-    <div class="modal">
+    <div class="modal" role="dialog" aria-modal="true">
       <h2>Welcome to Daily Streak!</h2>
       <p>Sync your habits across devices, or keep everything on this one.</p>
 
@@ -220,7 +291,7 @@
   </div>
 
   <div id="name-modal" class="modal-overlay">
-    <div class="modal">
+    <div class="modal" role="dialog" aria-modal="true">
       <h2>Welcome to Daily Streak!</h2>
       <p>What should we call you?</p>
       <form id="name-form">
@@ -237,7 +308,7 @@
   </div>
 
   <div id="edit-habit-modal" class="modal-overlay">
-    <div class="modal">
+    <div class="modal" role="dialog" aria-modal="true">
       <h2>Edit habit</h2>
       <form id="edit-habit-form">
         <input
@@ -258,6 +329,14 @@
             <option value="month">month(s)</option>
           </select>
         </div>
+        <div class="modal-rest-row">
+          <label for="edit-rest-allowance-input">Rest days per month</label>
+          <input id="edit-rest-allowance-input" type="number" min="0" max="31" value="3" />
+        </div>
+        <p class="modal-rest-hint">
+          Spend a rest day to credit a missed period without breaking your streak — it
+          doesn't count as a real completion.
+        </p>
         <div class="modal-btn-row">
           <button type="button" id="edit-cancel-btn" class="modal-btn-secondary">Cancel</button>
           <button type="submit">Save</button>
@@ -267,7 +346,7 @@
   </div>
 
   <div id="history-modal" class="modal-overlay">
-    <div class="modal modal-wide">
+    <div class="modal modal-wide" role="dialog" aria-modal="true">
       <button id="history-close-btn" class="modal-close-btn" aria-label="Close">✕</button>
       <h2 id="history-habit-name"></h2>
       <div class="history-stats">
@@ -291,11 +370,12 @@
       <div class="heatmap-scroll">
         <div id="history-heatmap" class="heatmap"></div>
       </div>
+      <button type="button" id="history-share-btn" class="history-share-btn">Share as image</button>
     </div>
   </div>
 
   <div id="auth-modal" class="modal-overlay">
-    <div class="modal">
+    <div class="modal" role="dialog" aria-modal="true">
       <h2 id="auth-modal-title">Sign in</h2>
       <p id="auth-modal-subtitle">Sign in to sync your habits across devices.</p>
 
