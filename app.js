@@ -81,9 +81,6 @@ const nameModal = document.getElementById("name-modal");
 const nameForm = document.getElementById("name-form");
 const nameInput = document.getElementById("name-input");
 const themeToggle = document.getElementById("theme-toggle");
-const exportBtn = document.getElementById("export-btn");
-const importBtn = document.getElementById("import-btn");
-const importFile = document.getElementById("import-file");
 const toastStack = document.getElementById("toast-stack");
 
 const editModal = document.getElementById("edit-habit-modal");
@@ -1577,93 +1574,6 @@ function celebratePerfectDay(habitCount) {
   showMilestoneToast(`Perfect day! All ${habitCount} habit${habitCount === 1 ? "" : "s"} complete`, 3200);
 }
 
-// --- Backup & restore ---
-
-function exportData() {
-  const payload = {
-    app: "daily-streak",
-    exportedAt: new Date().toISOString(),
-    name: getDisplayName(),
-    habits: loadHabits(),
-  };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `daily-streak-backup-${todayKey()}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-// Coerces one imported habit into a valid shape, dropping/defaulting anything malformed
-// instead of trusting the file wholesale — a hand-edited or corrupted backup shouldn't be
-// able to crash render()/countInWindow or get pushed straight to Supabase. Returns null
-// for anything unsalvageable (no usable name).
-function sanitizeImportedHabit(raw) {
-  if (!raw || typeof raw !== "object") return null;
-  if (typeof raw.name !== "string" || !raw.name.trim()) return null;
-
-  const isDateArray = (v) =>
-    Array.isArray(v) && v.every((d) => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d));
-  const isDateStr = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
-
-  return {
-    id: typeof raw.id === "string" && raw.id ? raw.id : crypto.randomUUID(),
-    name: raw.name.trim().slice(0, 60),
-    target: Number.isInteger(raw.target) && raw.target > 0 ? raw.target : 1,
-    periodValue: Number.isInteger(raw.periodValue) && raw.periodValue > 0 ? raw.periodValue : 1,
-    periodUnit: ["day", "week", "month"].includes(raw.periodUnit) ? raw.periodUnit : "day",
-    createdAt: isDateStr(raw.createdAt) ? raw.createdAt : null,
-    completions: isDateArray(raw.completions) ? raw.completions : [],
-    milestonesHit: Array.isArray(raw.milestonesHit) ? raw.milestonesHit.filter((n) => typeof n === "number") : [],
-    restDays: isDateArray(raw.restDays) ? raw.restDays : [],
-    archivedAt: isDateStr(raw.archivedAt) || typeof raw.archivedAt === "string" ? raw.archivedAt : null,
-    restDayAllowance: Number.isInteger(raw.restDayAllowance) && raw.restDayAllowance >= 0 ? raw.restDayAllowance : 3,
-  };
-}
-
-function importData(file) {
-  const reader = new FileReader();
-  reader.onload = async () => {
-    try {
-      const data = JSON.parse(reader.result);
-      if (!Array.isArray(data.habits)) throw new Error("Invalid backup file");
-
-      const sanitized = data.habits.map(sanitizeImportedHabit).filter(Boolean);
-      const skipped = data.habits.length - sanitized.length;
-      if (sanitized.length === 0 && data.habits.length > 0) {
-        throw new Error("No valid habits found in that backup file");
-      }
-
-      const ok = confirm(
-        `This will replace your current ${habitsCache.length} habit(s) with ` +
-          `${sanitized.length} habit(s) from the backup` +
-          `${skipped > 0 ? ` (${skipped} skipped — unreadable data)` : ""}. Continue?`
-      );
-      if (!ok) return;
-
-      habitsCache = sanitized;
-      await backfillMissingCreatedAt();
-      render();
-
-      if (currentUser) {
-        if (data.name) await setDisplayName(data.name);
-        renderGreeting();
-        await replaceCloudHabits(habitsCache);
-      } else {
-        if (data.name) saveName(data.name);
-        saveLocalHabits(habitsCache);
-        renderGreeting();
-      }
-    } catch (err) {
-      alert("Couldn't read that file — make sure it's a Daily Streak backup JSON.");
-    } finally {
-      importFile.value = "";
-    }
-  };
-  reader.readAsText(file);
-}
-
 // --- Weekly review ---
 // A Sunday-evening recap of the most recently completed Monday–Sunday week. The
 // underlying streak math has no calendar anchor (see periodDaysLeft), so the review's
@@ -1970,13 +1880,6 @@ nameForm.addEventListener("submit", async (e) => {
     await setDisplayName(name);
   }
   renderGreeting();
-});
-
-exportBtn.addEventListener("click", exportData);
-importBtn.addEventListener("click", () => importFile.click());
-importFile.addEventListener("change", () => {
-  const file = importFile.files[0];
-  if (file) importData(file);
 });
 
 // --- Account & auth ---

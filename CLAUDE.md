@@ -64,6 +64,6 @@ First-time users (`getDisplayName()` empty) see `#welcome-modal` via `initName()
 
 All colors are CSS custom properties on `:root` in `style.css`, overridden under both `@media (prefers-color-scheme: dark)` and `:root[data-theme="dark"]` so the in-app toggle (`applyTheme`/`initTheme`) can override system preference. Use existing `var(--...)` tokens for new UI. Exception: the ink surfaces (hero band, at-risk card, rest-day offer card, weekly review's drifting tile) are hardcoded to literal hex (`#201515`, `#ff4f00`, etc.) — they're deliberately "always ink" regardless of the light/dark toggle, not a missed dark-mode case.
 
-### Milestones & backup
+### Milestones
 
-`markDone()` checks the new streak against `STREAK_MILESTONES = [7, 30, 100, 365]`, tracked per-habit in `milestonesHit` so each fires once — a `.milestone-toast` plus a `.habit-card.celebrate` pulse, no confetti and no emoji tier icons (the design system allows exactly one chromatic accent). `exportData()`/`importData()` serialize `{ name, habits }` to/from a JSON file against whatever's currently loaded; for a signed-out user it's the only way data survives a cleared `localStorage`. First sign-in with existing local habits and an empty cloud account prompts (`confirm()`) to bulk-copy them in.
+`markDone()` checks the new streak against `STREAK_MILESTONES = [7, 30, 100, 365]`, tracked per-habit in `milestonesHit` so each fires once — a `.milestone-toast` plus a `.habit-card.celebrate` pulse, no confetti and no emoji tier icons (the design system allows exactly one chromatic accent). First sign-in with existing local habits and an empty cloud account prompts (`confirm()`) to bulk-copy them in via `replaceCloudHabits()`.
