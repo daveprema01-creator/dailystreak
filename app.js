@@ -20,7 +20,37 @@ const periodUnitInput = document.getElementById("period-unit-input");
 const list = document.getElementById("habit-list");
 const emptyState = document.getElementById("empty-state");
 const cardTemplate = document.getElementById("habit-card-template");
+const offerCardTemplate = document.getElementById("habit-offer-card-template");
+const addHabitToggle = document.getElementById("add-habit-toggle");
 const greeting = document.getElementById("greeting");
+
+const heroLongestLabel = document.getElementById("hero-longest-label");
+const heroLongestNumeral = document.getElementById("hero-longest-numeral");
+const heroLongestUnit = document.getElementById("hero-longest-unit");
+const heroStatDone = document.getElementById("hero-stat-done");
+const heroStatRate = document.getElementById("hero-stat-rate");
+const heroStatRest = document.getElementById("hero-stat-rest");
+
+const mainView = document.getElementById("main-view");
+const reviewBtn = document.getElementById("review-btn");
+const weeklyReviewView = document.getElementById("weekly-review-view");
+const reviewBackBtn = document.getElementById("review-back-btn");
+const reviewEyebrow = document.getElementById("review-eyebrow");
+const reviewHeadline = document.getElementById("review-headline");
+const reviewLead = document.getElementById("review-lead");
+const reviewTableBody = document.getElementById("review-table-body");
+const reviewRowTemplate = document.getElementById("review-row-template");
+const reviewTile1Value = document.getElementById("review-tile1-value");
+const reviewTile1Label = document.getElementById("review-tile1-label");
+const reviewTile2Value = document.getElementById("review-tile2-value");
+const reviewTile2Label = document.getElementById("review-tile2-label");
+const reviewDrift = document.getElementById("review-drift");
+const reviewDriftHeadline = document.getElementById("review-drift-headline");
+const reviewDriftBody = document.getElementById("review-drift-body");
+const reviewDriftAccept = document.getElementById("review-drift-accept");
+const reviewDriftKeep = document.getElementById("review-drift-keep");
+const reviewSetTargets = document.getElementById("review-set-targets");
+const reviewDone = document.getElementById("review-done");
 const nameModal = document.getElementById("name-modal");
 const nameForm = document.getElementById("name-form");
 const nameInput = document.getElementById("name-input");
@@ -149,6 +179,7 @@ function habitToRow(habit, userId) {
     created_at: habit.createdAt,
     completions: habit.completions,
     milestones_hit: habit.milestonesHit,
+    rest_days: habit.restDays,
   };
 }
 
@@ -162,16 +193,21 @@ function rowToHabit(row) {
     createdAt: row.created_at,
     completions: row.completions || [],
     milestonesHit: row.milestones_hit || [],
+    restDays: row.rest_days || [],
   };
 }
 
-// Persists a habit's completions/milestonesHit after markDone/undoLast — the only
-// fields those two actions ever change.
+// Persists a habit's completions/milestonesHit/restDays after markDone/undoLast/useRestDay —
+// the only fields those actions ever change.
 async function persistHabitFields(habit) {
   if (currentUser) {
     const { error } = await supabaseClient
       .from("habits")
-      .update({ completions: habit.completions, milestones_hit: habit.milestonesHit })
+      .update({
+        completions: habit.completions,
+        milestones_hit: habit.milestonesHit,
+        rest_days: habit.restDays,
+      })
       .eq("id", habit.id);
     if (error) showSyncError(`Couldn't sync "${habit.name}" — ${error.message}`);
   } else {
@@ -208,6 +244,14 @@ function formatDate(date) {
 
 function todayKey() {
   return formatDate(new Date());
+}
+
+// Parses a "YYYY-MM-DD" key as a local date at midnight. `new Date("YYYY-MM-DD")` parses
+// as UTC, which shifts a day off in any timezone behind UTC — always use this instead
+// for dates coming out of completions/restDays/createdAt.
+function parseDateKey(dateStr) {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  return new Date(year, month - 1, day);
 }
 
 // --- Period helpers ---
@@ -252,16 +296,27 @@ function countInWindow(completions, endDate, days) {
   return completions.filter((d) => d >= startStr && d <= endStr).length;
 }
 
-function calcStreak(completions, target, days) {
+// Same window math as countInWindow, for a habit's restDays.
+function restDaysInWindow(restDays, endDate, days) {
+  const start = new Date(endDate);
+  start.setDate(start.getDate() - (days - 1));
+  const startStr = formatDate(start);
+  const endStr = formatDate(endDate);
+  return restDays.filter((d) => d >= startStr && d <= endStr).length;
+}
+
+function calcStreak(completions, target, days, restDays = []) {
   let streak = 0;
   const cursor = new Date();
+  const windowMet = (endDate) =>
+    countInWindow(completions, endDate, days) + restDaysInWindow(restDays, endDate, days) >= target;
 
   // If the current window's goal isn't met yet, the streak is still "alive" based on the prior window.
-  if (countInWindow(completions, cursor, days) < target) {
+  if (!windowMet(cursor)) {
     cursor.setDate(cursor.getDate() - days);
   }
 
-  while (countInWindow(completions, cursor, days) >= target) {
+  while (windowMet(cursor)) {
     streak++;
     cursor.setDate(cursor.getDate() - days);
   }
@@ -277,13 +332,14 @@ function longestStreak(habit) {
   const period = getPeriod(habit);
   const days = periodDays(period);
   const target = getTarget(habit);
-  const firstDate = new Date([...completions].sort()[0]);
+  const restDays = habit.restDays || [];
+  const firstDate = parseDateKey([...completions].sort()[0]);
 
   let longest = 0;
   let current = 0;
   const cursor = new Date();
   while (cursor >= firstDate) {
-    if (countInWindow(completions, cursor, days) >= target) {
+    if (countInWindow(completions, cursor, days) + restDaysInWindow(restDays, cursor, days) >= target) {
       current++;
       longest = Math.max(longest, current);
     } else {
@@ -292,6 +348,43 @@ function longestStreak(habit) {
     cursor.setDate(cursor.getDate() - days);
   }
   return longest;
+}
+
+// --- Rest days ---
+// 3 rest days per calendar month, per habit, derived — no stored counter.
+
+function currentYearMonth() {
+  return todayKey().slice(0, 7);
+}
+
+function restDaysUsedThisMonth(habit) {
+  return (habit.restDays || []).filter((d) => d.startsWith(currentYearMonth())).length;
+}
+
+function restDaysLeft(habit) {
+  return Math.max(0, 3 - restDaysUsedThisMonth(habit));
+}
+
+// The current period-in-progress, anchored to the habit's creation date (since the
+// underlying streak math is a pure rolling window with no calendar anchor of its own).
+// Returns how many days remain before this period chunk ends.
+function periodDaysLeft(habit, days) {
+  const created = habit.createdAt ? parseDateKey(habit.createdAt) : new Date();
+  const today = new Date();
+  const daysSinceCreation = Math.floor((today - created) / 86400000);
+  const daysIntoPeriod = ((daysSinceCreation % days) + days) % days;
+  return days - 1 - daysIntoPeriod;
+}
+
+// The most recently-completed period chunk before the current one, using the same
+// creation-anchored period grid as periodDaysLeft.
+function previousPeriodWindow(habit, days) {
+  const daysLeft = periodDaysLeft(habit, days);
+  const currentWindowEnd = new Date();
+  currentWindowEnd.setDate(currentWindowEnd.getDate() + daysLeft);
+  const previousWindowEnd = new Date(currentWindowEnd);
+  previousWindowEnd.setDate(previousWindowEnd.getDate() - days);
+  return previousWindowEnd;
 }
 
 function totalCompletions(habit) {
@@ -306,7 +399,7 @@ function completionRate(habit) {
   const period = getPeriod(habit);
   const days = periodDays(period);
   const target = getTarget(habit);
-  const firstDate = new Date([...completions].sort()[0]);
+  const firstDate = parseDateKey([...completions].sort()[0]);
   const spanDays = Math.floor((new Date() - firstDate) / 86400000) + 1;
   const totalPeriods = Math.max(1, Math.ceil(spanDays / days));
 
@@ -345,6 +438,111 @@ function heatmapLevel(count, fairShare) {
   return 1;
 }
 
+// Renders the 12-week map used on the main-list habit card into `container` — a CSS
+// grid of 9x9 cells, oldest first, with rest days grey and today ringed.
+function renderCardMap(container, habit) {
+  container.innerHTML = "";
+  const period = getPeriod(habit);
+  const days = periodDays(period);
+  const target = getTarget(habit);
+  const fairShare = target / days;
+  const restDays = habit.restDays || [];
+  const weeksData = buildHeatmap(habit.completions, 12);
+  const today = todayKey();
+
+  weeksData.forEach((week) => {
+    week.forEach(({ date, count }) => {
+      const cell = document.createElement("span");
+      const isRested = restDays.includes(date);
+      cell.className = isRested ? "map-cell rested" : `map-cell level-${heatmapLevel(count, fairShare)}`;
+      if (date === today) cell.classList.add("today");
+      cell.title = isRested ? `${date}: rested` : `${date}: ${count} completion${count === 1 ? "" : "s"}`;
+      container.appendChild(cell);
+    });
+  });
+}
+
+// Suggested rule from the design handoff: a habit is "at risk" when its current window
+// can still be met but is behind pace. At most one card flips per screen — the longest
+// current streak wins ties.
+function pickAtRiskHabit(habits) {
+  let best = null;
+  habits.forEach((habit) => {
+    const period = getPeriod(habit);
+    const days = periodDays(period);
+    const target = getTarget(habit);
+    const remaining = target - countInWindow(habit.completions, new Date(), days);
+    const daysLeft = periodDaysLeft(habit, days);
+    if (remaining > 0 && remaining >= daysLeft) {
+      const streak = calcStreak(habit.completions, target, days, habit.restDays || []);
+      if (!best || streak > best.streak) {
+        best = { habit, remaining, daysLeft, streak };
+      }
+    }
+  });
+  return best;
+}
+
+function numberWord(n) {
+  const words = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
+  return n < words.length ? words[n] : String(n);
+}
+
+function atRiskPillText(remaining, daysLeft) {
+  const deadline = new Date();
+  deadline.setDate(deadline.getDate() + daysLeft);
+  const weekday = deadline.toLocaleDateString("en-US", { weekday: "long" });
+  return `${numberWord(remaining)} more by ${weekday}`;
+}
+
+// A habit offers a rest day when its most recently-completed period chunk failed its
+// target, the streak would otherwise break there, and an unspent rest day is available
+// this month. Dismissing ("Let it reset") is tracked in memory only — the data model
+// doesn't add a persisted field for it.
+const dismissedRestOffers = new Set();
+
+function restOfferPeriodKey(habit, days) {
+  return formatDate(previousPeriodWindow(habit, days));
+}
+
+function pickRestOfferHabit(habits) {
+  for (const habit of habits) {
+    const period = getPeriod(habit);
+    const days = periodDays(period);
+    const target = getTarget(habit);
+    const restDays = habit.restDays || [];
+    const prevWindowEnd = previousPeriodWindow(habit, days);
+    // Skip periods that ended before the habit even existed — nothing to have missed.
+    if (habit.createdAt && formatDate(prevWindowEnd) < habit.createdAt) continue;
+    const prevCount = countInWindow(habit.completions, prevWindowEnd, days);
+    const alreadyRested = restDaysInWindow(restDays, prevWindowEnd, days) > 0;
+    const deficit = target - prevCount;
+    const key = `${habit.id}:${restOfferPeriodKey(habit, days)}`;
+
+    if (
+      deficit === 1 &&
+      !alreadyRested &&
+      restDaysLeft(habit) > 0 &&
+      !dismissedRestOffers.has(key)
+    ) {
+      const windowStart = new Date(prevWindowEnd);
+      windowStart.setDate(windowStart.getDate() - (days - 1));
+      let blankDate = null;
+      for (let d = new Date(prevWindowEnd); d >= windowStart; d.setDate(d.getDate() - 1)) {
+        const dateStr = formatDate(d);
+        if (countOnDate(habit.completions, dateStr) === 0) {
+          blankDate = dateStr;
+          break;
+        }
+      }
+      if (blankDate) {
+        return { habit, days, target, blankDate, windowStart, windowEnd: prevWindowEnd, key };
+      }
+    }
+  }
+  return null;
+}
+
 // Whether every habit's current period goal is already met today.
 function allHabitsMetToday(habits) {
   if (habits.length === 0) return false;
@@ -360,20 +558,72 @@ function allHabitsMetToday(habits) {
   });
 }
 
-const TIER_ICONS = ["🔥", "🔥🔥", "🌟", "💎"];
-const previousStreakTiers = new Map();
-const previousGoalMet = new Map();
-const previousFillPct = new Map();
-
-function tierIndex(streak) {
-  if (streak >= 100) return 3;
-  if (streak >= 30) return 2;
-  if (streak >= 7) return 1;
-  return 0;
+// Completion rate across all habits within the trailing 12-week (84-day) window, used
+// for the hero band's "last 12 weeks" stat.
+function last12WeeksRate(habits) {
+  if (habits.length === 0) return 0;
+  const windowDays = 84;
+  const end = new Date();
+  let totalPeriods = 0;
+  let metPeriods = 0;
+  habits.forEach((habit) => {
+    const period = getPeriod(habit);
+    const days = periodDays(period);
+    const target = getTarget(habit);
+    const restDays = habit.restDays || [];
+    const periods = Math.max(1, Math.floor(windowDays / days));
+    const cursor = new Date(end);
+    for (let i = 0; i < periods; i++) {
+      totalPeriods++;
+      if (countInWindow(habit.completions, cursor, days) + restDaysInWindow(restDays, cursor, days) >= target) {
+        metPeriods++;
+      }
+      cursor.setDate(cursor.getDate() - days);
+    }
+  });
+  return totalPeriods === 0 ? 0 : Math.round((metPeriods / totalPeriods) * 100);
 }
 
-function flameForStreak(streak) {
-  return TIER_ICONS[tierIndex(streak)];
+function updateHero(habits) {
+  if (habits.length === 0) {
+    heroLongestLabel.textContent = "Longest run";
+    heroLongestNumeral.textContent = "0";
+    heroLongestUnit.textContent = "days unbroken";
+    heroStatDone.textContent = "0/0";
+    heroStatRate.textContent = "0%";
+    heroStatRest.textContent = "0";
+    return;
+  }
+
+  let longestHabit = habits[0];
+  let longestValue = -1;
+  habits.forEach((habit) => {
+    const value = longestStreak(habit);
+    if (value > longestValue) {
+      longestValue = value;
+      longestHabit = habit;
+    }
+  });
+  const longestPeriod = getPeriod(longestHabit);
+  const unitWord = longestPeriod.unit === "day" ? "days" : longestPeriod.unit === "week" ? "weeks" : "months";
+
+  heroLongestLabel.textContent = `Longest run · ${longestHabit.name}`;
+  heroLongestNumeral.textContent = longestValue;
+  heroLongestUnit.textContent = `${unitWord} unbroken`;
+
+  const doneToday = habits.filter((habit) => {
+    const period = getPeriod(habit);
+    const days = periodDays(period);
+    const target = getTarget(habit);
+    const count =
+      days === 1
+        ? countOnDate(habit.completions, todayKey())
+        : countInWindow(habit.completions, new Date(), days);
+    return count >= target;
+  }).length;
+  heroStatDone.textContent = `${doneToday}/${habits.length}`;
+  heroStatRate.textContent = `${last12WeeksRate(habits)}%`;
+  heroStatRest.textContent = restDaysLeft(longestHabit);
 }
 
 // --- Greeting ---
@@ -422,18 +672,75 @@ themeToggle.addEventListener("click", () => {
 
 // --- Rendering ---
 
+const WEEKDAY_ABBR = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+function renderOfferCard(offer) {
+  const { habit, days, target, blankDate, windowStart, windowEnd } = offer;
+  const node = offerCardTemplate.content.cloneNode(true);
+  const card = node.querySelector(".habit-card");
+  card.dataset.id = habit.id;
+
+  node.querySelector(".offer-habit-name").textContent = habit.name;
+  // The streak at stake — what spending the rest day would preserve, not the already-broken value.
+  const previewRestDays = [...(habit.restDays || []), blankDate];
+  const streak = calcStreak(habit.completions, target, days, previewRestDays);
+  node.querySelector(".offer-streak-numeral").textContent = streak;
+  node.querySelector(".offer-streak-label").textContent = streak === 1 ? "day" : "days";
+
+  const blankWeekday = parseDateKey(blankDate).toLocaleDateString("en-US", { weekday: "long" });
+  node.querySelector(".offer-meta").textContent =
+    `${target}× every ${periodPhrase(getPeriod(habit))} · ${blankWeekday} is blank`;
+
+  const rail = node.querySelector(".offer-week-rail");
+  for (let d = new Date(windowStart); d <= windowEnd; d.setDate(d.getDate() + 1)) {
+    const dateStr = formatDate(d);
+    const col = document.createElement("div");
+    col.className = "offer-week-day";
+    const block = document.createElement("div");
+    const isDone = countOnDate(habit.completions, dateStr) > 0;
+    block.className = "offer-week-block" + (isDone ? " done" : "") + (dateStr === blankDate ? " repairable" : "");
+    const label = document.createElement("div");
+    label.className = "offer-week-label";
+    label.textContent = WEEKDAY_ABBR[d.getDay()];
+    col.appendChild(block);
+    col.appendChild(label);
+    rail.appendChild(col);
+  }
+
+  node.querySelector(".offer-use-btn").addEventListener("click", () => useRestDay(habit.id, offer));
+  node.querySelector(".offer-reset-btn").addEventListener("click", () => {
+    dismissedRestOffers.add(offer.key);
+    render();
+  });
+
+  return node;
+}
+
 function render() {
   const habits = loadHabits();
   list.innerHTML = "";
 
   emptyState.style.display = habits.length === 0 ? "block" : "none";
 
-  const pendingFillUpdates = [];
+  updateHero(habits);
+
+  const restOffer = pickRestOfferHabit(habits);
+  const atRiskCandidates = restOffer ? habits.filter((h) => h.id !== restOffer.habit.id) : habits;
+  const atRisk = pickAtRiskHabit(atRiskCandidates);
 
   habits.forEach((habit) => {
+    if (restOffer && restOffer.habit.id === habit.id) {
+      list.appendChild(renderOfferCard(restOffer));
+      return;
+    }
+
     const node = cardTemplate.content.cloneNode(true);
     const card = node.querySelector(".habit-card");
     card.dataset.id = habit.id;
+
+    const isAtRisk = atRisk && atRisk.habit.id === habit.id;
+    card.classList.toggle("at-risk", !!isAtRisk);
 
     const nameBtn = node.querySelector(".habit-name");
     nameBtn.textContent = habit.name;
@@ -444,53 +751,44 @@ function render() {
     const days = periodDays(period);
     const isDaily = days === 1;
 
-    node.querySelector(".habit-goal-text").textContent =
-      `${target}× every ${periodPhrase(period)}`;
-
     const periodCount = isDaily
       ? countOnDate(habit.completions, todayKey())
       : countInWindow(habit.completions, new Date(), days);
-    const streak = calcStreak(habit.completions, target, days);
+    const streak = calcStreak(habit.completions, target, days, habit.restDays || []);
     const goalMet = periodCount >= target;
 
-    const flameEl = node.querySelector(".streak-flame");
-    flameEl.textContent = flameForStreak(streak);
-    const tier = tierIndex(streak);
-    const prevTier = previousStreakTiers.get(habit.id);
-    if (prevTier !== undefined && tier > prevTier) {
-      flameEl.classList.add("tier-up");
-      flameEl.addEventListener("animationend", () => flameEl.classList.remove("tier-up"), { once: true });
+    node.querySelector(".habit-streak-numeral").textContent = streak;
+    node.querySelector(".habit-meta").textContent = isDaily
+      ? `${target}× every ${periodPhrase(period)} · ${periodCount} of ${target} today`
+      : `${target}× every ${periodPhrase(period)} · ${periodCount} of ${target} in the last ${periodPhrase(period)}`;
+
+    renderCardMap(node.querySelector(".habit-map"), habit);
+
+    const pill = node.querySelector(".habit-pill");
+    if (isAtRisk) {
+      pill.hidden = false;
+      pill.classList.add("on-ink");
+      pill.textContent = atRiskPillText(atRisk.remaining, atRisk.daysLeft);
+    } else {
+      // Show the rested acknowledgment as long as the most recently completed period
+      // (the one a rest day would have applied to) contains one.
+      const prevWindowEnd = previousPeriodWindow(habit, days);
+      const prevWindowStart = new Date(prevWindowEnd);
+      prevWindowStart.setDate(prevWindowStart.getDate() - (days - 1));
+      const prevStartStr = formatDate(prevWindowStart);
+      const prevEndStr = formatDate(prevWindowEnd);
+      const restedDate = (habit.restDays || [])
+        .filter((d) => d >= prevStartStr && d <= prevEndStr)
+        .sort()
+        .pop();
+      if (restedDate) {
+        pill.hidden = false;
+        const weekday = parseDateKey(restedDate).toLocaleDateString("en-US", { weekday: "long" });
+        pill.textContent = `${weekday} rested`;
+      } else {
+        pill.hidden = true;
+      }
     }
-    previousStreakTiers.set(habit.id, tier);
-
-    node.querySelector(".streak-text").textContent = `${streak} streak`;
-    node.querySelector(".period-text").textContent = isDaily
-      ? `${periodCount} / ${target} today`
-      : `${periodCount} / ${target} in the last ${periodPhrase(period)}`;
-
-    const visual = node.querySelector(".progress-visual");
-    const track = document.createElement("div");
-    track.className = "progress-bar-track";
-    const fill = document.createElement("div");
-    fill.className = "progress-bar-fill";
-
-    // Freshly-created elements have no prior on-screen width to transition from, so start
-    // each fill at its last known % and let the post-render frame animate it to the new one.
-    const fillPct = Math.min(100, (periodCount / target) * 100);
-    const prevFillPct = previousFillPct.has(habit.id) ? previousFillPct.get(habit.id) : fillPct;
-    fill.style.width = `${prevFillPct}%`;
-    previousFillPct.set(habit.id, fillPct);
-    pendingFillUpdates.push({ fill, fillPct });
-
-    const wasGoalMet = previousGoalMet.get(habit.id);
-    if (goalMet && wasGoalMet === false) {
-      fill.classList.add("goal-met");
-      fill.addEventListener("animationend", () => fill.classList.remove("goal-met"), { once: true });
-    }
-    previousGoalMet.set(habit.id, goalMet);
-
-    track.appendChild(fill);
-    visual.appendChild(track);
 
     const completeBtn = node.querySelector(".complete-btn");
     if (target === 1 && isDaily) {
@@ -514,15 +812,6 @@ function render() {
 
     list.appendChild(node);
   });
-
-  // Force layout so the browser commits each fill's starting width before we change it,
-  // otherwise the two writes collapse into one and the transition never plays.
-  list.offsetHeight;
-  requestAnimationFrame(() => {
-    pendingFillUpdates.forEach(({ fill, fillPct }) => {
-      fill.style.width = `${fillPct}%`;
-    });
-  });
 }
 
 // --- Actions ---
@@ -537,6 +826,7 @@ async function addHabit(name, target, periodValue, periodUnit) {
     createdAt: todayKey(),
     completions: [],
     milestonesHit: [],
+    restDays: [],
   };
   habitsCache.push(habit);
   render();
@@ -649,7 +939,7 @@ async function markDone(id) {
   if (!habit.milestonesHit) habit.milestonesHit = [];
 
   const days = periodDays(getPeriod(habit));
-  const newStreak = calcStreak(habit.completions, getTarget(habit), days);
+  const newStreak = calcStreak(habit.completions, getTarget(habit), days, habit.restDays || []);
 
   let hitMilestone = null;
   for (const m of STREAK_MILESTONES) {
@@ -693,6 +983,20 @@ async function undoLast(id) {
   await persistHabitFields(habit);
 }
 
+// Spends one of the habit's monthly rest days to fill the blank period identified by
+// pickRestOfferHabit, keeping the streak alive without counting as a real completion.
+async function useRestDay(id, offer) {
+  const habit = habitsCache.find((h) => h.id === id);
+  if (!habit) return;
+
+  if (!habit.restDays) habit.restDays = [];
+  habit.restDays.push(offer.blankDate);
+  dismissedRestOffers.add(offer.key);
+
+  render();
+  await persistHabitFields(habit);
+}
+
 // --- Edit habit ---
 
 let editingId = null;
@@ -716,6 +1020,25 @@ function closeEditModal() {
   editingId = null;
 }
 
+// Shared by the edit-habit modal and the weekly review's drifting-cadence accept action.
+async function saveHabitEdits(habit, { name, target, periodValue, periodUnit }) {
+  habit.name = name;
+  habit.target = target;
+  habit.periodValue = periodValue;
+  habit.periodUnit = periodUnit;
+  render();
+
+  if (currentUser) {
+    const { error } = await supabaseClient
+      .from("habits")
+      .update({ name, target, period_value: periodValue, period_unit: periodUnit })
+      .eq("id", habit.id);
+    if (error) showSyncError(`Couldn't save changes to "${name}" — ${error.message}`);
+  } else {
+    saveLocalHabits(habitsCache);
+  }
+}
+
 editForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!editingId) return;
@@ -732,21 +1055,7 @@ editForm.addEventListener("submit", async (e) => {
   closeEditModal();
   if (!habit) return;
 
-  habit.name = name;
-  habit.target = target;
-  habit.periodValue = periodValue;
-  habit.periodUnit = periodUnit;
-  render();
-
-  if (currentUser) {
-    const { error } = await supabaseClient
-      .from("habits")
-      .update({ name, target, period_value: periodValue, period_unit: periodUnit })
-      .eq("id", habit.id);
-    if (error) showSyncError(`Couldn't save changes to "${name}" — ${error.message}`);
-  } else {
-    saveLocalHabits(habitsCache);
-  }
+  await saveHabitEdits(habit, { name, target, periodValue, periodUnit });
 });
 
 editCancelBtn.addEventListener("click", closeEditModal);
@@ -765,7 +1074,7 @@ function openHistoryModal(id) {
   const target = getTarget(habit);
 
   historyHabitName.textContent = habit.name;
-  historyCurrentStreak.textContent = calcStreak(habit.completions, target, days);
+  historyCurrentStreak.textContent = calcStreak(habit.completions, target, days, habit.restDays || []);
   historyLongestStreak.textContent = longestStreak(habit);
   historyTotal.textContent = totalCompletions(habit);
   historyRate.textContent = `${completionRate(habit)}%`;
@@ -806,104 +1115,36 @@ historyModal.addEventListener("click", (e) => {
 
 // --- Celebration animation ---
 
-const PARTICLE_EMOJI = ["🎉", "✨", "🔥", "⭐"];
-
 function celebrate(id) {
   const card = list.querySelector(`.habit-card[data-id="${id}"]`);
   if (!card) return;
 
   card.classList.add("celebrate");
   card.addEventListener("animationend", () => card.classList.remove("celebrate"), { once: true });
-
-  const btn = card.querySelector(".complete-btn");
-  const burst = document.createElement("div");
-  burst.className = "particle-burst";
-
-  for (let i = 0; i < 8; i++) {
-    const particle = document.createElement("span");
-    particle.className = "particle";
-    particle.textContent = PARTICLE_EMOJI[Math.floor(Math.random() * PARTICLE_EMOJI.length)];
-
-    const angle = (Math.PI * 2 * i) / 8 + Math.random() * 0.4;
-    const distance = 50 + Math.random() * 30;
-    particle.style.setProperty("--tx", `${Math.cos(angle) * distance}px`);
-    particle.style.setProperty("--ty", `${Math.sin(angle) * distance - 20}px`);
-    particle.style.left = "50%";
-    particle.style.top = "50%";
-
-    burst.appendChild(particle);
-  }
-
-  btn.appendChild(burst);
-  setTimeout(() => burst.remove(), 700);
 }
 
 function celebrateMilestone(habitName, days) {
   const toast = document.createElement("div");
   toast.className = "milestone-toast";
-  toast.textContent = `🔥 ${days}-day streak on "${habitName}"!`;
+  toast.textContent = `${days}-day streak on "${habitName}"!`;
   document.body.appendChild(toast);
   setTimeout(() => toast.classList.add("visible"));
   setTimeout(() => {
     toast.classList.remove("visible");
     setTimeout(() => toast.remove(), 300);
   }, 2600);
-
-  const burst = document.createElement("div");
-  burst.className = "particle-burst milestone-burst";
-  for (let i = 0; i < 24; i++) {
-    const particle = document.createElement("span");
-    particle.className = "particle";
-    particle.textContent = PARTICLE_EMOJI[Math.floor(Math.random() * PARTICLE_EMOJI.length)];
-    const angle = Math.random() * Math.PI * 2;
-    const distance = 120 + Math.random() * 180;
-    particle.style.setProperty("--tx", `${Math.cos(angle) * distance}px`);
-    particle.style.setProperty("--ty", `${Math.sin(angle) * distance}px`);
-    particle.style.left = "50%";
-    particle.style.top = "40%";
-    burst.appendChild(particle);
-  }
-  document.body.appendChild(burst);
-  setTimeout(() => burst.remove(), 1000);
 }
 
 function celebratePerfectDay(habitCount) {
   const toast = document.createElement("div");
-  toast.className = "milestone-toast perfect-day-toast";
-  toast.textContent = `🎊 Perfect day! All ${habitCount} habit${habitCount === 1 ? "" : "s"} complete`;
+  toast.className = "milestone-toast";
+  toast.textContent = `Perfect day! All ${habitCount} habit${habitCount === 1 ? "" : "s"} complete`;
   document.body.appendChild(toast);
   setTimeout(() => toast.classList.add("visible"));
   setTimeout(() => {
     toast.classList.remove("visible");
     setTimeout(() => toast.remove(), 300);
   }, 3200);
-
-  const burstPositions = [
-    { left: "20%", top: "30%" },
-    { left: "50%", top: "25%" },
-    { left: "80%", top: "30%" },
-    { left: "50%", top: "55%" },
-  ];
-  burstPositions.forEach((pos, idx) => {
-    setTimeout(() => {
-      const burst = document.createElement("div");
-      burst.className = "particle-burst milestone-burst";
-      for (let i = 0; i < 14; i++) {
-        const particle = document.createElement("span");
-        particle.className = "particle";
-        particle.textContent = PARTICLE_EMOJI[Math.floor(Math.random() * PARTICLE_EMOJI.length)];
-        const angle = Math.random() * Math.PI * 2;
-        const distance = 90 + Math.random() * 140;
-        particle.style.setProperty("--tx", `${Math.cos(angle) * distance}px`);
-        particle.style.setProperty("--ty", `${Math.sin(angle) * distance}px`);
-        particle.style.left = pos.left;
-        particle.style.top = pos.top;
-        burst.appendChild(particle);
-      }
-      document.body.appendChild(burst);
-      setTimeout(() => burst.remove(), 1000);
-    }, idx * 120);
-  });
 }
 
 // --- Backup & restore ---
@@ -957,7 +1198,243 @@ function importData(file) {
   reader.readAsText(file);
 }
 
+// --- Weekly review ---
+// A Sunday-evening recap of the most recently completed Monday–Sunday week. The
+// underlying streak math has no calendar anchor (see periodDaysLeft), so the review's
+// week boundary is a display-only convention layered on top, not a change to calcStreak.
+
+function isoWeekNumber(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+}
+
+function getReviewWeekRange() {
+  const today = new Date();
+  const weekEnd = new Date(today);
+  weekEnd.setDate(weekEnd.getDate() - today.getDay());
+  const weekStart = new Date(weekEnd);
+  weekStart.setDate(weekStart.getDate() - 6);
+  return { weekStart, weekEnd };
+}
+
+function formatReviewDateRange(weekStart, weekEnd) {
+  const startMonth = weekStart.toLocaleDateString("en-US", { month: "long" });
+  const endMonth = weekEnd.toLocaleDateString("en-US", { month: "long" });
+  if (startMonth === endMonth) {
+    return `${weekStart.getDate()}–${weekEnd.getDate()} ${endMonth}`;
+  }
+  return `${weekStart.getDate()} ${startMonth} – ${weekEnd.getDate()} ${endMonth}`;
+}
+
+function computeWeeklyReviewRows(habits, weekStart, weekEnd) {
+  const prevWeekEnd = new Date(weekStart);
+  prevWeekEnd.setDate(prevWeekEnd.getDate() - 1);
+
+  return habits.map((habit) => {
+    const period = getPeriod(habit);
+    const days = periodDays(period);
+    const target = getTarget(habit);
+    const restDays = habit.restDays || [];
+
+    const cells = [];
+    for (let d = new Date(weekStart); d <= weekEnd; d.setDate(d.getDate() + 1)) {
+      const dateStr = formatDate(d);
+      const isRested = restDays.includes(dateStr);
+      const isDone = countOnDate(habit.completions, dateStr) > 0;
+      cells.push({ date: dateStr, state: isRested ? "rested" : isDone ? "done" : "blank" });
+    }
+
+    const weekCount = countInWindow(habit.completions, weekEnd, 7);
+    const lastWeekCount = countInWindow(habit.completions, prevWeekEnd, 7);
+    const weekTarget = Math.max(1, Math.round((target * 7) / days));
+    const held = weekCount >= weekTarget;
+    const delta = weekCount - lastWeekCount;
+
+    return {
+      habit,
+      period,
+      cells,
+      weekCount,
+      weekTarget,
+      held,
+      deltaLabel: delta === 0 ? "even" : delta > 0 ? `+${delta}` : `−${Math.abs(delta)}`,
+    };
+  });
+}
+
+function reviewHeadlineText(rows) {
+  const held = rows.filter((r) => r.held).length;
+  const slipped = rows.length - held;
+  if (rows.length === 0) return "Nothing to review yet.";
+  if (slipped === 0) return "All held.";
+  if (held === 0) return "All slipped.";
+  return `${numberWord(held)} held. ${numberWord(slipped)} slipped.`;
+}
+
+function reviewLeadText(rows) {
+  if (rows.length === 0) return "Add a habit to start building your weekly recap.";
+  const held = rows.filter((r) => r.held).length;
+  return `You kept ${held} of ${rows.length} habit${rows.length === 1 ? "" : "s"} on pace this week.`;
+}
+
+function computeTiles(rows) {
+  const dayTotals = [0, 0, 0, 0, 0, 0, 0];
+  let total = 0;
+  rows.forEach((row) => {
+    row.cells.forEach((cell) => {
+      if (cell.state === "done") {
+        dayTotals[parseDateKey(cell.date).getDay()]++;
+        total++;
+      }
+    });
+  });
+  let bestDay = 0;
+  dayTotals.forEach((count, i) => {
+    if (count > dayTotals[bestDay]) bestDay = i;
+  });
+  return {
+    tile1Value: total === 0 ? "—" : WEEKDAY_NAMES[bestDay],
+    tile1Label: "Most active day",
+    tile2Value: String(total),
+    tile2Label: `Completion${total === 1 ? "" : "s"} this week`,
+  };
+}
+
+// Drift detection: median gap between completions in the trailing 12 weeks, compared
+// against the habit's own cadence. Surfaces at most one habit — the largest ratio.
+function computeDrift(habits) {
+  let best = null;
+  const windowStart = new Date();
+  windowStart.setDate(windowStart.getDate() - 83);
+  const startStr = formatDate(windowStart);
+
+  habits.forEach((habit) => {
+    const period = getPeriod(habit);
+    const days = periodDays(period);
+    const dates = [...new Set(habit.completions.filter((d) => d >= startStr))].sort();
+    if (dates.length < 6) return;
+
+    const gaps = [];
+    for (let i = 1; i < dates.length; i++) {
+      gaps.push(Math.round((parseDateKey(dates[i]) - parseDateKey(dates[i - 1])) / 86400000));
+    }
+    const sorted = [...gaps].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    const medianGap = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    const ratio = medianGap / days;
+
+    if (ratio > 1.25 && (!best || ratio > best.ratio)) {
+      const suggestedValue = medianGap <= 14 ? Math.max(1, Math.round(medianGap)) : Math.max(1, Math.round(medianGap / 7));
+      const suggestedUnit = medianGap <= 14 ? "day" : "week";
+      best = { habit, medianGap, ratio, suggestedValue, suggestedUnit };
+    }
+  });
+
+  return best;
+}
+
+let currentDrift = null;
+
+function renderWeeklyReview() {
+  const habits = loadHabits();
+  const { weekStart, weekEnd } = getReviewWeekRange();
+  const rows = computeWeeklyReviewRows(habits, weekStart, weekEnd);
+
+  reviewEyebrow.textContent = `Week ${isoWeekNumber(weekEnd)} · ${formatReviewDateRange(weekStart, weekEnd)}`;
+  reviewHeadline.textContent = reviewHeadlineText(rows);
+  reviewLead.textContent = reviewLeadText(rows);
+
+  reviewTableBody.innerHTML = "";
+  rows.forEach((row) => {
+    const node = reviewRowTemplate.content.cloneNode(true);
+    node.querySelector(".review-row-name").textContent = row.habit.name;
+    node.querySelector(".review-row-cadence").textContent =
+      `${getTarget(row.habit)}× every ${periodPhrase(row.period)}`;
+    const weekEl = node.querySelector(".review-row-week");
+    row.cells.forEach((cell) => {
+      const cellEl = document.createElement("div");
+      cellEl.className = cell.state === "blank" ? "review-day-cell" : `review-day-cell ${cell.state}`;
+      cellEl.title = cell.date;
+      weekEl.appendChild(cellEl);
+    });
+    node.querySelector(".review-col-hit").textContent = `${row.weekCount} / ${row.weekTarget}`;
+    node.querySelector(".review-col-delta").textContent = row.deltaLabel;
+    reviewTableBody.appendChild(node);
+  });
+
+  const tiles = computeTiles(rows);
+  reviewTile1Value.textContent = tiles.tile1Value;
+  reviewTile1Label.textContent = tiles.tile1Label;
+  reviewTile2Value.textContent = tiles.tile2Value;
+  reviewTile2Label.textContent = tiles.tile2Label;
+
+  currentDrift = computeDrift(habits);
+  if (currentDrift) {
+    const { habit, suggestedValue, suggestedUnit } = currentDrift;
+    const suggestedUnitWord = suggestedValue === 1 ? suggestedUnit : `${suggestedUnit}s`;
+    reviewDrift.hidden = false;
+    reviewDriftHeadline.textContent =
+      `${habit.name} is set to every ${periodPhrase(getPeriod(habit))} but runs every ${suggestedValue} ${suggestedUnitWord}`;
+    reviewDriftBody.textContent =
+      "Its actual pace has drifted from the target — updating the cadence keeps the streak honest.";
+    reviewDriftAccept.textContent = `Change to every ${suggestedValue} ${suggestedUnitWord}`;
+    reviewDriftKeep.textContent = `Keep ${getTarget(habit)}× every ${periodPhrase(getPeriod(habit))}`;
+  } else {
+    reviewDrift.hidden = true;
+  }
+}
+
+function openWeeklyReview() {
+  renderWeeklyReview();
+  mainView.style.display = "none";
+  weeklyReviewView.classList.add("visible");
+  window.scrollTo(0, 0);
+}
+
+function closeWeeklyReview() {
+  weeklyReviewView.classList.remove("visible");
+  mainView.style.display = "";
+}
+
+reviewBtn.addEventListener("click", openWeeklyReview);
+reviewBackBtn.addEventListener("click", closeWeeklyReview);
+reviewDone.addEventListener("click", closeWeeklyReview);
+reviewSetTargets.addEventListener("click", closeWeeklyReview);
+
+reviewDriftAccept.addEventListener("click", async () => {
+  if (!currentDrift) return;
+  const { habit, suggestedValue, suggestedUnit } = currentDrift;
+  await saveHabitEdits(habit, {
+    name: habit.name,
+    target: getTarget(habit),
+    periodValue: suggestedValue,
+    periodUnit: suggestedUnit,
+  });
+  renderWeeklyReview();
+});
+
+reviewDriftKeep.addEventListener("click", () => {
+  reviewDrift.hidden = true;
+  currentDrift = null;
+});
+
 // --- Events ---
+
+function openAddHabitForm() {
+  addHabitToggle.classList.add("hidden");
+  form.classList.add("visible");
+  input.focus();
+}
+
+function closeAddHabitForm() {
+  form.classList.remove("visible");
+  addHabitToggle.classList.remove("hidden");
+}
+
+addHabitToggle.addEventListener("click", openAddHabitForm);
 
 form.addEventListener("submit", (e) => {
   e.preventDefault();
@@ -972,7 +1449,7 @@ form.addEventListener("submit", (e) => {
 
   addHabit(name, target, periodValue, periodUnit);
   input.value = "";
-  input.focus();
+  closeAddHabitForm();
 });
 
 nameForm.addEventListener("submit", async (e) => {
