@@ -51,6 +51,10 @@ const reviewDriftAccept = document.getElementById("review-drift-accept");
 const reviewDriftKeep = document.getElementById("review-drift-keep");
 const reviewSetTargets = document.getElementById("review-set-targets");
 const reviewDone = document.getElementById("review-done");
+const welcomeModal = document.getElementById("welcome-modal");
+const welcomeGoogleBtn = document.getElementById("welcome-google-btn");
+const welcomeEmailBtn = document.getElementById("welcome-email-btn");
+const welcomeSkipBtn = document.getElementById("welcome-skip-btn");
 const nameModal = document.getElementById("name-modal");
 const nameForm = document.getElementById("name-form");
 const nameInput = document.getElementById("name-input");
@@ -645,11 +649,44 @@ function renderGreeting() {
   greeting.classList.add("visible");
 }
 
+// "local" while asking for a name to stay signed out, "account" while asking for a name
+// ahead of an email/password sign-up. Read by the nameForm submit handler below.
+let onboardingNameTarget = null;
+
 function initName() {
   if (getDisplayName()) return;
+  if (currentUser) {
+    // Signed in (e.g. a Google account with no derivable name) but no display name yet —
+    // skip the create-account/stay-logged-out choice, just ask for a name directly.
+    onboardingNameTarget = null;
+    nameModal.classList.add("visible");
+    nameInput.focus();
+    return;
+  }
+  welcomeModal.classList.add("visible");
+}
+
+welcomeGoogleBtn.addEventListener("click", () => {
+  welcomeModal.classList.remove("visible");
+  supabaseClient.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo: window.location.href },
+  });
+});
+
+welcomeEmailBtn.addEventListener("click", () => {
+  welcomeModal.classList.remove("visible");
+  onboardingNameTarget = "account";
   nameModal.classList.add("visible");
   nameInput.focus();
-}
+});
+
+welcomeSkipBtn.addEventListener("click", () => {
+  welcomeModal.classList.remove("visible");
+  onboardingNameTarget = "local";
+  nameModal.classList.add("visible");
+  nameInput.focus();
+});
 
 // --- Theme ---
 
@@ -1458,10 +1495,23 @@ nameForm.addEventListener("submit", async (e) => {
   if (!name) return;
   nameModal.classList.remove("visible");
 
+  // Save locally first regardless of path — for the "account" path this is what lets the
+  // typed name survive a page reload if Supabase requires email confirmation before the
+  // account actually signs in (see the display-name promotion in onAuthStateChange).
+  // renderGreeting() right away too: getDisplayName() already falls back to this local
+  // name while signed out, so the greeting can show before the account exists.
+  saveName(name);
+  renderGreeting();
+
+  if (onboardingNameTarget === "account") {
+    onboardingNameTarget = null;
+    openAuthModal("sign-up");
+    return;
+  }
+  onboardingNameTarget = null;
+
   if (currentUser) {
     await setDisplayName(name);
-  } else {
-    saveName(name);
   }
   renderGreeting();
 });
@@ -1501,8 +1551,8 @@ function updateAuthModeUI() {
   }
 }
 
-function openAuthModal() {
-  authMode = "sign-in";
+function openAuthModal(mode = "sign-in") {
+  authMode = mode;
   updateAuthModeUI();
   authError.classList.remove("visible", "success");
   authForm.reset();
@@ -1589,8 +1639,21 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
 
   await refreshHabitsCache();
 
+  // Promote a name onto the account the first time it has none — from the Google profile
+  // for an OAuth sign-in, or from the name typed into the onboarding flow for an
+  // email/password sign-up. Deliberately outside the `justSignedIn` check: a real Google
+  // OAuth redirect reloads the whole page, so `authBootstrapped` is false and
+  // `justSignedIn` is false even on a first sign-in. Safe to run on every auth event —
+  // it's a no-op once `display_name` is set.
+  if (currentUser && !currentUser.user_metadata?.display_name) {
+    const googleName = currentUser.user_metadata?.full_name || currentUser.user_metadata?.name;
+    const nameToUse = googleName || loadName();
+    if (nameToUse) await setDisplayName(nameToUse);
+  }
+
   if (justSignedIn) {
     closeAuthModal();
+    welcomeModal.classList.remove("visible");
     const localHabits = loadLocalHabits();
     if (localHabits.length > 0 && habitsCache.length === 0) {
       if (confirm(`Import your ${localHabits.length} local habit(s) into this account?`)) {
