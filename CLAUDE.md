@@ -67,3 +67,33 @@ All colors are CSS custom properties on `:root` in `style.css`, overridden under
 ### Milestones
 
 `markDone()` checks the new streak against `STREAK_MILESTONES = [7, 30, 100, 365]`, tracked per-habit in `milestonesHit` so each fires once — a `.milestone-toast` plus a `.habit-card.celebrate` pulse, no confetti and no emoji tier icons (the design system allows exactly one chromatic accent). First sign-in with existing local habits and an empty cloud account prompts (`confirm()`) to bulk-copy them in via `replaceCloudHabits()`.
+
+## React rewrite (`web/`) — in progress
+
+A social layer (friends, public/private accounts, an activity feed — inspired by Hevy) is being added on top of Daily Streak. That's a big enough UI/architecture jump that it comes with a full rewrite to **React + TypeScript + Vite**, living in `web/` alongside the three flat files above — the vanilla app stays live and untouched (still what's actually deployed) until the rewrite reaches full parity and a deliberate cutover happens. `web/` has its own `package.json`/npm deps/Vite build — the "no build tools" rule above applies only to the root three files, not to `web/`.
+
+Both apps currently read/write the **same Supabase project** (`yyeexumwqboxfpbssoqj`). Any schema change made for the rewrite needs to stay backward-compatible with the vanilla app's `habitToRow`/`rowToHabit` until cutover — e.g. new columns must be nullable/defaulted so the vanilla app, which never reads/writes them, keeps working unmodified.
+
+### Architecture summary
+
+- `web/src/lib/habits.ts` — the vanilla app's streak/period/rest-day math ported near-verbatim (pure functions, framework-free), now with real unit tests in `habits.test.ts` (vitest) — the first test coverage this logic has ever had.
+- `web/src/api/` — a `HabitsApi` interface with two implementations (`localHabitsApi.ts` for guest/localStorage, `supabaseHabitsApi.ts` for signed-in), selected by session state. Guest mode reuses the **same localStorage keys** as the vanilla app (`lib/storageKeys.ts`), so a guest's data carries over automatically once the new app replaces the old one at the same origin.
+- `web/src/hooks/useHabits.ts` — the one hook owning all habit mutations (add/delete/undo/complete/archive/reorder/rest-days), following the same "mutate the cache optimistically, fire the persist call in the background, toast on failure" pattern as the vanilla app's `habitsCache`/`render()` loop, just via TanStack Query's cache instead of a module-level array. Supabase Realtime subscription invalidates/merges into that cache the same way the vanilla app's hand-rolled realtime merge did.
+- State: TanStack Query for all server data (habits, profile), Zustand (`store/sessionStore.ts`) for exactly session + theme + the guest display name — deliberately not habit data, to avoid a dual-source-of-truth bug.
+- Real React Router routes (`/`, `/review`, `/insights`, `/settings`, `/u/:username`, `/sign-in`, `/sign-up`) replace the vanilla app's in-page view-swap pattern (`#weekly-review-view` toggling in place of `#main-view`).
+- `web/src/index.css` was copied byte-for-byte from `style.css` — components reuse the exact same class names in JSX, so the visual result is pixel-identical to the vanilla app. Any new UI (e.g. `Settings.tsx`, the first standalone non-modal form) needs its own explicit styling — the vanilla app's CSS only scopes inputs/buttons to `.modal` or specific component classes, nothing is styled by bare tag name.
+- Onboarding is two sequential, App-level-gated modals (`OnboardingModal` for name, `ProfileSetupModal` for username/public-private), checked in `App.tsx`'s `OnboardingGates` regardless of which route a user lands on directly — real URLs mean users can land anywhere, not just `/`.
+
+### Supabase gotcha found during the rewrite
+
+A table created via `apply_migration` (raw SQL) does **not** automatically get the `anon`/`authenticated` role grants that Supabase's dashboard table editor sets up for you. RLS policies alone aren't sufficient — without an explicit `grant select, insert, update on <table> to authenticated;`, every request 403s before RLS is even evaluated. Hit this with the `profiles` table; check `information_schema.role_table_grants` if a new table's queries mysteriously 403 despite correct-looking RLS.
+
+### Phase status
+
+Per the social-overhaul plan (schema, RLS design, full rollout plan) that was worked out with the user:
+
+- **Phase A — React/Vite rewrite, feature parity, no social features.** ✅ Done. Every vanilla-app feature ported and manually browser-tested.
+- **Phase B — Profiles, usernames, public/private account setting.** ✅ Done. `profiles` table + RLS, mandatory username-claim gate, self-view-only `/u/:username`, Settings profile editing. No visibility into anyone else's data yet — that's intentional, not a gap.
+- **Phase C — Follow / friend-request system.** ⬜ Not started. `follows` table (single table, `status: 'pending' | 'accepted'` — a follow on a public account auto-inserts as accepted, a private account's follow starts pending) with `request_follow`/`accept_follow`/`reject_follow`/`unfollow` RPCs (not direct table grants — the accept-vs-pending branching depending on the target's `is_public` is exactly the kind of multi-party logic that's fragile as a raw RLS `WITH CHECK`). `/friends` route (requests inbox, following/followers lists), `FollowButton` on other users' profiles. Still no habit content becomes visible in this phase — `habits_shared_read` RLS can be deployed here (inert until Phase D) so Phase D is UI-only work.
+- **Phase D — Per-habit sharing + activity feed.** ⬜ Not started. Adds `habits.shared` (boolean, default false — additive/nullable-safe for the vanilla app), a dedicated `activity_events` table written at milestone-time (not computed live — reuses the same streak-math module the personal dashboard already runs, so there's one implementation of "did a milestone happen," not two). The load-bearing security detail: `activity_events` visibility must be a **live join** back to `habits.shared`/`follows.status` at read time, never a flag cached on the event row — otherwise un-sharing a habit doesn't retroactively hide its past feed entries, which is a real leak. `/feed` route, shared-habit content finally rendering on other users' `/u/:username` pages.
+- **Deploy migration** (any phase, not yet done): move off GitHub Pages to Vercel via the `web/vercel.json` SPA rewrite rule already in place — GitHub Pages has no native build step and fights React Router's client-side paths on direct load/refresh.
