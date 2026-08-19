@@ -8,9 +8,6 @@ import { ArchiveList } from "../components/habit/ArchiveList";
 import { HabitForm, type HabitFormValues } from "../components/habit/HabitForm";
 import { HistoryModal } from "../components/habit/HistoryModal";
 import { Modal } from "../components/ui/Modal";
-import { OnboardingModal } from "../components/layout/OnboardingModal";
-import { useSessionStore } from "../store/sessionStore";
-import { useDisplayName } from "../hooks/useSession";
 
 export function PersonalDashboard() {
   const {
@@ -35,10 +32,6 @@ export function PersonalDashboard() {
   const [editHabitId, setEditHabitId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [localOrder, setLocalOrder] = useState<string[] | null>(null);
-
-  const bootstrapped = useSessionStore((s) => s.bootstrapped);
-  const displayName = useDisplayName();
-  const needsOnboarding = bootstrapped && !displayName;
 
   const atRiskCandidates = restOffer ? activeHabits.filter((h) => h.id !== restOffer.habit.id) : activeHabits;
   const atRisk = pickAtRiskHabit(atRiskCandidates);
@@ -109,7 +102,6 @@ export function PersonalDashboard() {
 
   return (
     <div className="main-view">
-      {needsOnboarding && <OnboardingModal />}
       <HeroBand habits={activeHabits} />
 
       <main id="main-content">

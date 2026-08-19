@@ -1,0 +1,81 @@
+import { supabase } from "../lib/supabase";
+
+export interface Profile {
+  id: string;
+  username: string;
+  displayName: string;
+  isPublic: boolean;
+  bio: string;
+  avatarUrl: string | null;
+  createdAt: string;
+}
+
+interface ProfileRow {
+  id: string;
+  username: string;
+  display_name: string;
+  is_public: boolean;
+  bio: string;
+  avatar_url: string | null;
+  created_at: string;
+}
+
+function rowToProfile(row: ProfileRow): Profile {
+  return {
+    id: row.id,
+    username: row.username,
+    displayName: row.display_name,
+    isPublic: row.is_public,
+    bio: row.bio,
+    avatarUrl: row.avatar_url,
+    createdAt: row.created_at,
+  };
+}
+
+export async function fetchOwnProfile(userId: string): Promise<Profile | null> {
+  const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+  if (error) throw error;
+  return data ? rowToProfile(data as ProfileRow) : null;
+}
+
+export async function fetchProfileByUsername(username: string): Promise<Profile | null> {
+  const { data, error } = await supabase.from("profiles").select("*").eq("username", username).maybeSingle();
+  if (error) throw error;
+  return data ? rowToProfile(data as ProfileRow) : null;
+}
+
+export async function isUsernameAvailable(username: string): Promise<boolean> {
+  const { data, error } = await supabase.from("profiles").select("id").eq("username", username).maybeSingle();
+  if (error) throw error;
+  return !data;
+}
+
+export async function createProfile(
+  userId: string,
+  fields: { username: string; displayName: string; isPublic: boolean }
+): Promise<Profile> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .insert({
+      id: userId,
+      username: fields.username,
+      display_name: fields.displayName,
+      is_public: fields.isPublic,
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return rowToProfile(data as ProfileRow);
+}
+
+export async function updateProfile(
+  userId: string,
+  fields: Partial<{ displayName: string; isPublic: boolean; bio: string }>
+): Promise<void> {
+  const patch: Partial<ProfileRow> = {};
+  if (fields.displayName !== undefined) patch.display_name = fields.displayName;
+  if (fields.isPublic !== undefined) patch.is_public = fields.isPublic;
+  if (fields.bio !== undefined) patch.bio = fields.bio;
+  const { error } = await supabase.from("profiles").update(patch).eq("id", userId);
+  if (error) throw error;
+}

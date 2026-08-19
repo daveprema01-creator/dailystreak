@@ -1,8 +1,9 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useSessionStore } from "../store/sessionStore";
 import { useDisplayName } from "../hooks/useSession";
+import { useOwnProfile } from "../hooks/useProfile";
 import { setAccountDisplayName } from "../lib/displayName";
 import { PageShell } from "../components/layout/PageShell";
 
@@ -13,6 +14,25 @@ export function Settings() {
   const navigate = useNavigate();
   const [nameInput, setNameInput] = useState(name ?? "");
   const [saving, setSaving] = useState(false);
+
+  const { profile, saveProfile } = useOwnProfile();
+  const [bioInput, setBioInput] = useState("");
+  const [visibility, setVisibility] = useState<"public" | "private">("private");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileSaved, setProfileSaved] = useState(false);
+
+  // profile loads asynchronously — useState's initializer only runs once at mount, so a
+  // direct page load (profile still null then) would otherwise leave these permanently
+  // out of sync with the real saved values once the fetch resolves.
+  useEffect(() => {
+    if (!profile) return;
+    setBioInput(profile.bio);
+    setVisibility(profile.isPublic ? "public" : "private");
+  }, [profile?.id]);
+
+  useEffect(() => {
+    if (name) setNameInput(name);
+  }, [name]);
 
   async function handleSaveName(e: FormEvent) {
     e.preventDefault();
@@ -30,6 +50,18 @@ export function Settings() {
     }
   }
 
+  async function handleSaveProfile(e: FormEvent) {
+    e.preventDefault();
+    setSavingProfile(true);
+    setProfileSaved(false);
+    try {
+      await saveProfile({ bio: bioInput.trim(), isPublic: visibility === "public" });
+      setProfileSaved(true);
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
   async function handleSignOut() {
     if (!confirm("Sign out? Your habits stay saved in your account.")) return;
     await supabase.auth.signOut();
@@ -44,7 +76,11 @@ export function Settings() {
         {user ? `Signed in as ${user.email}` : "You're not signed in — habits are saved on this device only."}
       </p>
 
-      <form onSubmit={handleSaveName} style={{ maxWidth: 360, display: "flex", flexDirection: "column", gap: 10, marginBottom: 32 }}>
+      <form
+        className="settings-form"
+        onSubmit={handleSaveName}
+        style={{ maxWidth: 360, display: "flex", flexDirection: "column", gap: 10, marginBottom: 32 }}
+      >
         <input
           type="text"
           placeholder="Your name"
@@ -56,6 +92,61 @@ export function Settings() {
           Save name
         </button>
       </form>
+
+      {profile && (
+        <>
+          <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>@{profile.username}</h3>
+          <form
+            className="settings-form"
+            onSubmit={handleSaveProfile}
+            style={{ maxWidth: 360, display: "flex", flexDirection: "column", gap: 10, marginBottom: 32 }}
+          >
+            <textarea
+              placeholder="A short bio (optional)"
+              maxLength={160}
+              rows={3}
+              value={bioInput}
+              onChange={(e) => setBioInput(e.target.value)}
+              style={{ resize: "vertical" }}
+            />
+            <div className="modal-goal-row" style={{ gap: 10 }}>
+              {(["private", "public"] as const).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  style={{
+                    flex: 1,
+                    padding: "12px",
+                    borderRadius: 12,
+                    border: "1px solid var(--border)",
+                    background: visibility === option ? "var(--accent)" : "transparent",
+                    color: visibility === option ? "var(--on-accent)" : "var(--text-muted)",
+                    fontWeight: 600,
+                    textTransform: "capitalize",
+                    cursor: "pointer",
+                  }}
+                  onClick={() => setVisibility(option)}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+            <p className="modal-rest-hint">
+              {visibility === "public"
+                ? "Anyone can follow you instantly — no approval needed."
+                : "People have to request to follow you, and you approve each one."}
+            </p>
+            <button type="submit" disabled={savingProfile}>
+              {savingProfile ? "Saving…" : profileSaved ? "Saved ✓" : "Save profile"}
+            </button>
+          </form>
+
+          <Link to={`/u/${profile.username}`} className="settings-link" style={{ display: "inline-block", marginBottom: 32 }}>
+            View my profile
+          </Link>
+          <br />
+        </>
+      )}
 
       {user ? (
         <button type="button" className="review-set-targets" onClick={handleSignOut}>

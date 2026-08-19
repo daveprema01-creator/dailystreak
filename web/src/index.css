@@ -1990,3 +1990,57 @@ body {
     flex-wrap: wrap;
   }
 }
+
+/* --- Settings form (React app addition — no vanilla-app precedent existed for a
+   standalone, non-modal form, so these give inputs/buttons/links the same visual
+   language as the rest of the design system instead of falling back to browser defaults) --- */
+
+.settings-form input,
+.settings-form textarea {
+  padding: 12px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.settings-form input:focus,
+.settings-form textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.settings-form button[type="submit"] {
+  padding: 12px;
+  border-radius: 12px;
+  border: none;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.settings-form button[type="submit"]:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.settings-form button[type="submit"]:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.settings-link {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.settings-link:hover {
+  text-decoration: underline;
+}
