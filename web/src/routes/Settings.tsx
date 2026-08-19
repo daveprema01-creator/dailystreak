@@ -106,108 +106,107 @@ export function Settings() {
         {user ? `Signed in as ${user.email}` : "You're not signed in — habits are saved on this device only."}
       </p>
 
-      <form
-        className="settings-form"
-        onSubmit={handleSaveName}
-        style={{ maxWidth: 360, display: "flex", flexDirection: "column", gap: 10, marginBottom: 32 }}
-      >
-        <input
-          type="text"
-          placeholder="Your name"
-          maxLength={30}
-          value={nameInput}
-          onChange={(e) => setNameInput(e.target.value)}
-        />
-        <button type="submit" disabled={saving}>
-          Save name
-        </button>
-      </form>
-
-      {profile && (
-        <>
-          <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
-            <Avatar avatarUrl={profile.avatarUrl} name={profile.displayName || profile.username} size={64} />
-            <div>
-              <button
-                type="button"
-                className="settings-link"
-                onClick={() => avatarInputRef.current?.click()}
-                disabled={uploadingAvatar}
-                style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
-              >
-                {uploadingAvatar ? "Uploading…" : "Change photo"}
-              </button>
-              <input
-                ref={avatarInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleAvatarChange}
-                style={{ display: "none" }}
-              />
-            </div>
-          </div>
-          <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>@{profile.username}</h3>
-          <form
-            className="settings-form"
-            onSubmit={handleSaveProfile}
-            style={{ maxWidth: 360, display: "flex", flexDirection: "column", gap: 10, marginBottom: 32 }}
-          >
-            <textarea
-              placeholder="A short bio (optional)"
-              maxLength={160}
-              rows={3}
-              value={bioInput}
-              onChange={(e) => setBioInput(e.target.value)}
-              style={{ resize: "vertical" }}
+      <div className="settings-sections">
+        <section className="settings-card">
+          <h3 className="settings-card-title">Display name</h3>
+          <form className="settings-form" onSubmit={handleSaveName}>
+            <input
+              type="text"
+              placeholder="Your name"
+              maxLength={30}
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
             />
-            <div className="modal-goal-row" style={{ gap: 10 }}>
-              {(["private", "public"] as const).map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  style={{
-                    flex: 1,
-                    padding: "12px",
-                    borderRadius: 12,
-                    border: "1px solid var(--border)",
-                    background: visibility === option ? "var(--accent)" : "transparent",
-                    color: visibility === option ? "var(--on-accent)" : "var(--text-muted)",
-                    fontWeight: 600,
-                    textTransform: "capitalize",
-                    cursor: "pointer",
-                  }}
-                  onClick={() => setVisibility(option)}
-                >
-                  {option}
-                </button>
-              ))}
-            </div>
-            <p className="modal-rest-hint">
-              {visibility === "public"
-                ? "Anyone can follow you instantly — no approval needed."
-                : "People have to request to follow you, and you approve each one."}
-            </p>
-            <button type="submit" disabled={savingProfile}>
-              {savingProfile ? "Saving…" : profileSaved ? "Saved ✓" : "Save profile"}
+            <button type="submit" disabled={saving}>
+              Save name
             </button>
           </form>
+        </section>
 
-          <Link to={`/u/${profile.username}`} className="settings-link" style={{ display: "inline-block", marginBottom: 32 }}>
-            View my profile
-          </Link>
-          <br />
-        </>
-      )}
+        {profile && (
+          <section className="settings-card">
+            <h3 className="settings-card-title">Public profile</h3>
+            <div className="settings-avatar-row">
+              <Avatar avatarUrl={profile.avatarUrl} name={profile.displayName || profile.username} size={64} />
+              <div>
+                <div className="settings-username">@{profile.username}</div>
+                <button
+                  type="button"
+                  className="settings-link"
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={uploadingAvatar}
+                  style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
+                >
+                  {uploadingAvatar ? "Uploading…" : "Change photo"}
+                </button>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarChange}
+                  style={{ display: "none" }}
+                />
+              </div>
+            </div>
+            <form className="settings-form" onSubmit={handleSaveProfile}>
+              <textarea
+                placeholder="A short bio (optional)"
+                maxLength={160}
+                rows={3}
+                value={bioInput}
+                onChange={(e) => setBioInput(e.target.value)}
+                style={{ resize: "vertical" }}
+              />
+              <div className="modal-goal-row" style={{ gap: 10 }}>
+                {(["private", "public"] as const).map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    style={{
+                      flex: 1,
+                      padding: "12px",
+                      borderRadius: 12,
+                      border: "1px solid var(--border)",
+                      background: visibility === option ? "var(--accent)" : "transparent",
+                      color: visibility === option ? "var(--on-accent)" : "var(--text-muted)",
+                      fontWeight: 600,
+                      textTransform: "capitalize",
+                      cursor: "pointer",
+                    }}
+                    onClick={() => setVisibility(option)}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+              <p className="modal-rest-hint">
+                {visibility === "public"
+                  ? "Anyone can follow you instantly — no approval needed."
+                  : "People have to request to follow you, and you approve each one."}
+              </p>
+              <button type="submit" disabled={savingProfile}>
+                {savingProfile ? "Saving…" : profileSaved ? "Saved ✓" : "Save profile"}
+              </button>
+            </form>
 
-      {user ? (
-        <button type="button" className="review-set-targets" onClick={handleSignOut}>
-          Sign out
-        </button>
-      ) : (
-        <Link to="/sign-in" className="review-set-targets" style={{ textDecoration: "none", display: "inline-block" }}>
-          Sign in to sync
-        </Link>
-      )}
+            <Link to={`/u/${profile.username}`} className="settings-link settings-view-profile">
+              View my profile
+            </Link>
+          </section>
+        )}
+
+        <section className="settings-card">
+          {user ? (
+            <button type="button" className="review-set-targets" onClick={handleSignOut}>
+              Sign out
+            </button>
+          ) : (
+            <Link to="/sign-in" className="review-set-targets" style={{ textDecoration: "none", display: "inline-block" }}>
+              Sign in to sync
+            </Link>
+          )}
+        </section>
+      </div>
     </PageShell>
   );
 }

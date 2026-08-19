@@ -1855,7 +1855,7 @@ body {
   width: 20px;
 }
 
-.modal p.modal-rest-hint {
+p.modal-rest-hint {
   margin: 4px 0 0;
   font-size: 0.78rem;
   line-height: 1.4;
@@ -2183,6 +2183,12 @@ body {
    standalone, non-modal form, so these give inputs/buttons/links the same visual
    language as the rest of the design system instead of falling back to browser defaults) --- */
 
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .settings-form input,
 .settings-form textarea {
   padding: 12px 14px;
@@ -2231,6 +2237,49 @@ body {
 
 .settings-link:hover {
   text-decoration: underline;
+}
+
+.settings-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 560px;
+}
+
+.settings-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+
+.settings-card-title {
+  margin: 0 0 18px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.settings-avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.settings-username {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.settings-view-profile {
+  display: inline-block;
+  margin-top: 18px;
 }
 
 /* --- Follows (Phase C — React app addition, no vanilla-app precedent) --- */
