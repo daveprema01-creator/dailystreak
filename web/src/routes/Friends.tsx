@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { PageShell } from "../components/layout/PageShell";
 import { useSessionStore } from "../store/sessionStore";
 import { useFriendRequests, useFollowersList, useFollowingList } from "../hooks/useFollows";
 import { useProfilesByIds } from "../hooks/useProfile";
-import type { Profile } from "../api/profilesApi";
+import { FollowButton } from "../components/social/FollowButton";
+import { searchProfilesByUsername, type Profile } from "../api/profilesApi";
 
 type Tab = "requests" | "following" | "followers";
 
@@ -32,6 +33,66 @@ function FriendRow({
         )}
       </div>
       <div className="friend-row-actions">{actions}</div>
+    </div>
+  );
+}
+
+function UserSearch({ userId }: { userId: string }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<Profile[]>([]);
+  const [searching, setSearching] = useState(false);
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (trimmed.length < 2) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
+    let cancelled = false;
+    setSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const found = await searchProfilesByUsername(trimmed, userId);
+        if (!cancelled) setResults(found);
+      } catch {
+        if (!cancelled) setResults([]);
+      } finally {
+        if (!cancelled) setSearching(false);
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [query, userId]);
+
+  return (
+    <div style={{ marginBottom: 28 }}>
+      <input
+        type="text"
+        placeholder="Find people by username…"
+        autoComplete="off"
+        className="friend-search-input"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+      {searching && <p className="friend-empty">Searching…</p>}
+      {!searching && query.trim().length >= 2 && results.length === 0 && (
+        <p className="friend-empty">No one found.</p>
+      )}
+      {results.length > 0 && (
+        <div className="friend-list" style={{ marginTop: 10 }}>
+          {results.map((p) => (
+            <FriendRow
+              key={p.id}
+              userId={p.id}
+              profile={p}
+              actions={<FollowButton targetId={p.id} />}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -71,6 +132,8 @@ export function Friends() {
     <PageShell>
       <div className="review-eyebrow">Friends</div>
       <h2 className="review-headline">Requests &amp; connections</h2>
+
+      <UserSearch userId={user.id} />
 
       <div className="friend-tabs" role="tablist">
         <button

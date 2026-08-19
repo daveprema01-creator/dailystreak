@@ -38,6 +38,7 @@ function baseHabit(overrides: Partial<Habit> = {}): Habit {
     restDays: [],
     archivedAt: null,
     restDayAllowance: 3,
+    shared: false,
     ...overrides,
   };
 }

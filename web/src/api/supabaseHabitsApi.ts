@@ -46,3 +46,20 @@ export const supabaseHabitsApi: HabitsApi = {
     if (insertError) throw insertError;
   },
 };
+
+/**
+ * Another user's shared, active habits — for their /u/:username page. The `shared`/
+ * `archived_at` filters here are just intent; `habits_shared_read` RLS is what actually
+ * enforces that this returns nothing unless the caller is an accepted follower.
+ */
+export async function fetchSharedHabits(userId: string) {
+  const { data, error } = await supabase
+    .from("habits")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("shared", true)
+    .is("archived_at", null)
+    .order("position", { ascending: true });
+  if (error) throw error;
+  return (data as HabitRow[]).map(rowToHabit);
+}

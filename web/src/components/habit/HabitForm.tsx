@@ -9,6 +9,7 @@ export interface HabitFormValues {
   periodValue: number;
   periodUnit: PeriodUnit;
   restDayAllowance?: number;
+  shared?: boolean;
 }
 
 interface HabitFormProps {
@@ -16,14 +17,17 @@ interface HabitFormProps {
   initial?: HabitFormValues;
   onSubmit: (values: HabitFormValues) => void;
   onCancel?: () => void;
+  /** Signed-in only — guests have no followers, so there's nothing to share with. */
+  showSharing?: boolean;
 }
 
-export function HabitForm({ mode, initial, onSubmit, onCancel }: HabitFormProps) {
+export function HabitForm({ mode, initial, onSubmit, onCancel, showSharing }: HabitFormProps) {
   const [name, setName] = useState(initial?.name ?? "");
   const [target, setTarget] = useState(initial?.target ?? 1);
   const [periodValue, setPeriodValue] = useState(initial?.periodValue ?? 1);
   const [periodUnit, setPeriodUnit] = useState<PeriodUnit>(initial?.periodUnit ?? "day");
   const [restDayAllowance, setRestDayAllowance] = useState(initial?.restDayAllowance ?? 3);
+  const [shared, setShared] = useState(initial?.shared ?? false);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -35,6 +39,7 @@ export function HabitForm({ mode, initial, onSubmit, onCancel }: HabitFormProps)
       periodValue: Math.max(1, periodValue || 1),
       periodUnit,
       ...(mode === "edit" ? { restDayAllowance: Math.max(0, restDayAllowance || 0) } : {}),
+      ...(mode === "edit" && showSharing ? { shared } : {}),
     });
     if (mode === "add") {
       setName("");
@@ -118,6 +123,24 @@ export function HabitForm({ mode, initial, onSubmit, onCancel }: HabitFormProps)
         Spend a rest day to credit a missed period without breaking your streak — it doesn't count as a real
         completion.
       </p>
+      {showSharing && (
+        <>
+          <div className="modal-share-row">
+            <label htmlFor="edit-shared-input">Share with followers</label>
+            <input
+              id="edit-shared-input"
+              type="checkbox"
+              checked={shared}
+              onChange={(e) => setShared(e.target.checked)}
+            />
+          </div>
+          <p className="modal-rest-hint">
+            {shared
+              ? "Followers you've accepted can see this habit's progress and milestones on your profile."
+              : "Only you can see this habit — turn on to show it on your profile and share milestones in the feed."}
+          </p>
+        </>
+      )}
       <div className="modal-btn-row">
         <button type="button" className="modal-btn-secondary" onClick={onCancel}>
           Cancel

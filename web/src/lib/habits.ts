@@ -16,6 +16,8 @@ export interface Habit {
   restDays: string[]; // "YYYY-MM-DD", one entry per period a rest day was spent on
   archivedAt: string | null; // ISO timestamp, or null if active
   restDayAllowance: number;
+  /** Signed-in only — visible to accepted followers on /u/:username. No-op for guests. */
+  shared: boolean;
   /** @deprecated back-compat only, read via getPeriod() */
   timeframe?: "day" | "week";
 }
@@ -429,6 +431,7 @@ export interface HabitRow {
   rest_days: string[];
   archived_at: string | null;
   rest_day_allowance: number;
+  shared?: boolean;
   position?: number;
 }
 
@@ -446,6 +449,7 @@ export function habitToRow(habit: Habit, userId: string): Omit<HabitRow, "positi
     rest_days: habit.restDays,
     archived_at: habit.archivedAt || null,
     rest_day_allowance: habit.restDayAllowance || 3,
+    shared: habit.shared || false,
   };
 }
 
@@ -462,6 +466,7 @@ export function rowToHabit(row: HabitRow): Habit {
     restDays: row.rest_days || [],
     archivedAt: row.archived_at || null,
     restDayAllowance: row.rest_day_allowance || 3,
+    shared: row.shared || false,
   };
 }
 
@@ -478,5 +483,6 @@ export function newHabit(name: string, target: number, periodValue: number, peri
     restDays: [],
     archivedAt: null,
     restDayAllowance: 3,
+    shared: false,
   };
 }

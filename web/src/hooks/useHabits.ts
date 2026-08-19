@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSessionStore } from "../store/sessionStore";
 import { getHabitsApi } from "../api/habitsApi";
 import { supabaseHabitsApi } from "../api/supabaseHabitsApi";
+import { insertActivityEvent } from "../api/activityApi";
 import { supabase } from "../lib/supabase";
 import { showInfoToast, showMilestoneToast, showUndoToast } from "../store/toastStore";
 import { LAST_PERFECT_DAY_KEY } from "../lib/storageKeys";
@@ -270,8 +271,18 @@ export function useHabits() {
       } catch (err) {
         showInfoToast(`Couldn't sync "${habit.name}" — ${(err as Error).message}`);
       }
+
+      // Written at milestone-time rather than computed live when the feed loads, so there's
+      // one implementation of "did a milestone happen" (this one) instead of two. Silent on
+      // failure — this is supplementary feed data, not something the user consciously waits
+      // on, so a toast here would just be noise.
+      if (hitMilestone && signedIn && userId) {
+        insertActivityEvent(userId, id, habit.name, hitMilestone, dateStr).catch((err) =>
+          console.error("Couldn't log activity event:", err)
+        );
+      }
     },
-    [api, getCurrent, setHabits]
+    [api, getCurrent, setHabits, signedIn, userId]
   );
 
   // Removes the most recent completion within the current window, regardless of which day
@@ -355,7 +366,14 @@ export function useHabits() {
   const saveHabitEdits = useCallback(
     async (
       id: string,
-      edits: { name: string; target: number; periodValue: number; periodUnit: PeriodUnit; restDayAllowance?: number }
+      edits: {
+        name: string;
+        target: number;
+        periodValue: number;
+        periodUnit: PeriodUnit;
+        restDayAllowance?: number;
+        shared?: boolean;
+      }
     ) => {
       const current = getCurrent();
       const idx = current.findIndex((h) => h.id === id);
@@ -367,6 +385,7 @@ export function useHabits() {
         periodValue: edits.periodValue,
         periodUnit: edits.periodUnit,
         ...(edits.restDayAllowance !== undefined ? { restDayAllowance: edits.restDayAllowance } : {}),
+        ...(edits.shared !== undefined ? { shared: edits.shared } : {}),
       };
       const next = [...current];
       next[idx] = habit;
@@ -379,6 +398,7 @@ export function useHabits() {
         period_unit: edits.periodUnit,
       };
       if (edits.restDayAllowance !== undefined) fields.rest_day_allowance = edits.restDayAllowance;
+      if (edits.shared !== undefined) fields.shared = edits.shared;
 
       try {
         await api.updateFields(id, fields, next);

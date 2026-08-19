@@ -60,6 +60,11 @@ export function HeroBand({ habits }: HeroBandProps) {
               Friends
             </Link>
           )}
+          {user && (
+            <Link to="/feed" className="hero-text-btn">
+              Feed
+            </Link>
+          )}
           <Link to={user ? "/settings" : "/sign-in"} className={`account-btn${user ? " signed-in" : ""}`}>
             {user ? name || user.email : "Sign in to sync"}
           </Link>

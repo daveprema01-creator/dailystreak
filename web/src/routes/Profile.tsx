@@ -1,8 +1,10 @@
 import { Link, useParams } from "react-router-dom";
 import { useSessionStore } from "../store/sessionStore";
 import { useOwnProfile, useProfileByUsername } from "../hooks/useProfile";
+import { useSharedHabits } from "../hooks/useSharedHabits";
 import { PageShell } from "../components/layout/PageShell";
 import { FollowButton } from "../components/social/FollowButton";
+import { SharedHabitCard } from "../components/social/SharedHabitCard";
 import type { Profile as ProfileData } from "../api/profilesApi";
 
 function ProfileCard({ profile, actions }: { profile: ProfileData; actions?: React.ReactNode }) {
@@ -39,6 +41,7 @@ export function Profile() {
   const isOwn = !!ownProfile && ownProfile.username === username;
 
   const { profile: otherProfile, isLoading: otherLoading } = useProfileByUsername(isOwn ? undefined : username);
+  const { habits: sharedHabits } = useSharedHabits(isOwn ? undefined : otherProfile?.id);
 
   if (!user) {
     return (
@@ -93,6 +96,13 @@ export function Profile() {
   return (
     <PageShell>
       <ProfileCard profile={otherProfile} actions={<FollowButton targetId={otherProfile.id} />} />
+      {sharedHabits.length > 0 && (
+        <div className="habit-list" style={{ marginTop: 24 }}>
+          {sharedHabits.map((habit) => (
+            <SharedHabitCard key={habit.id} habit={habit} />
+          ))}
+        </div>
+      )}
     </PageShell>
   );
 }

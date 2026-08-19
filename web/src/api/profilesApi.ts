@@ -51,6 +51,19 @@ export async function fetchProfilesByIds(ids: string[]): Promise<Profile[]> {
   return (data as ProfileRow[]).map(rowToProfile);
 }
 
+/** Username-prefix search, for finding people to follow — excludes the caller's own row. */
+export async function searchProfilesByUsername(query: string, excludeUserId: string): Promise<Profile[]> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("*")
+    .ilike("username", `${query}%`)
+    .neq("id", excludeUserId)
+    .order("username", { ascending: true })
+    .limit(20);
+  if (error) throw error;
+  return (data as ProfileRow[]).map(rowToProfile);
+}
+
 export async function isUsernameAvailable(username: string): Promise<boolean> {
   const { data, error } = await supabase.from("profiles").select("id").eq("username", username).maybeSingle();
   if (error) throw error;

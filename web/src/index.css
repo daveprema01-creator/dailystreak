@@ -1746,6 +1746,15 @@ body {
   text-align: center;
 }
 
+.modal-share-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
 .modal-rest-hint {
   margin: 4px 0 0;
   font-size: 0.78rem;
@@ -2186,4 +2195,22 @@ body {
   color: var(--text-faint);
   font-size: 0.9rem;
   padding: 8px 4px;
+}
+
+.friend-search-input {
+  width: 100%;
+  max-width: 360px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.friend-search-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
 }

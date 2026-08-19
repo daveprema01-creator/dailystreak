@@ -1,5 +1,6 @@
 import { useMemo, useState, type DragEvent } from "react";
 import { useHabits } from "../hooks/useHabits";
+import { useSessionStore } from "../store/sessionStore";
 import { pickAtRiskHabit, todayKey, type Habit } from "../lib/habits";
 import { HeroBand } from "../components/layout/HeroBand";
 import { HabitCard } from "../components/habit/HabitCard";
@@ -10,6 +11,7 @@ import { HistoryModal } from "../components/habit/HistoryModal";
 import { Modal } from "../components/ui/Modal";
 
 export function PersonalDashboard() {
+  const signedIn = !!useSessionStore((s) => s.user);
   const {
     activeHabits,
     archivedHabits,
@@ -168,9 +170,11 @@ export function PersonalDashboard() {
               periodValue: editHabit.periodValue,
               periodUnit: editHabit.periodUnit,
               restDayAllowance: editHabit.restDayAllowance,
+              shared: editHabit.shared,
             }}
             onSubmit={handleEditSubmit}
             onCancel={() => setEditHabitId(null)}
+            showSharing={signedIn}
           />
         )}
       </Modal>
