@@ -40,7 +40,7 @@ export function useOwnProfile() {
   );
 
   const saveProfile = useCallback(
-    async (fields: Partial<{ displayName: string; isPublic: boolean; bio: string }>) => {
+    async (fields: Partial<{ displayName: string; isPublic: boolean; bio: string; avatarUrl: string | null }>) => {
       if (!userId) throw new Error("Must be signed in to edit a profile");
       const current = queryClient.getQueryData<Profile>(key);
       await updateProfile(userId, fields);
@@ -50,6 +50,7 @@ export function useOwnProfile() {
           ...(fields.displayName !== undefined ? { displayName: fields.displayName } : {}),
           ...(fields.isPublic !== undefined ? { isPublic: fields.isPublic } : {}),
           ...(fields.bio !== undefined ? { bio: fields.bio } : {}),
+          ...(fields.avatarUrl !== undefined ? { avatarUrl: fields.avatarUrl } : {}),
         });
       }
     },

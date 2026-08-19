@@ -1,11 +1,15 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useSessionStore } from "../store/sessionStore";
 import { useDisplayName } from "../hooks/useSession";
 import { useOwnProfile } from "../hooks/useProfile";
 import { setAccountDisplayName } from "../lib/displayName";
+import { uploadAvatar } from "../api/profilesApi";
+import { resizeImageToSquareWebp } from "../lib/image";
+import { showInfoToast } from "../store/toastStore";
 import { PageShell } from "../components/layout/PageShell";
+import { Avatar } from "../components/ui/Avatar";
 
 export function Settings() {
   const user = useSessionStore((s) => s.user);
@@ -20,6 +24,8 @@ export function Settings() {
   const [visibility, setVisibility] = useState<"public" | "private">("private");
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   // profile loads asynchronously — useState's initializer only runs once at mount, so a
   // direct page load (profile still null then) would otherwise leave these permanently
@@ -66,6 +72,26 @@ export function Settings() {
     }
   }
 
+  async function handleAvatarChange(e: FormEvent<HTMLInputElement>) {
+    const file = e.currentTarget.files?.[0];
+    e.currentTarget.value = "";
+    if (!file || !user) return;
+    if (!file.type.startsWith("image/")) {
+      showInfoToast("Please choose an image file.");
+      return;
+    }
+    setUploadingAvatar(true);
+    try {
+      const resized = await resizeImageToSquareWebp(file);
+      const url = await uploadAvatar(user.id, resized);
+      await saveProfile({ avatarUrl: url });
+    } catch (err) {
+      showInfoToast(`Couldn't update photo — ${(err as Error).message}`);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
+
   async function handleSignOut() {
     if (!confirm("Sign out? Your habits stay saved in your account.")) return;
     await supabase.auth.signOut();
@@ -99,6 +125,27 @@ export function Settings() {
 
       {profile && (
         <>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
+            <Avatar avatarUrl={profile.avatarUrl} name={profile.displayName || profile.username} size={64} />
+            <div>
+              <button
+                type="button"
+                className="settings-link"
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={uploadingAvatar}
+                style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
+              >
+                {uploadingAvatar ? "Uploading…" : "Change photo"}
+              </button>
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarChange}
+                style={{ display: "none" }}
+              />
+            </div>
+          </div>
           <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>@{profile.username}</h3>
           <form
             className="settings-form"

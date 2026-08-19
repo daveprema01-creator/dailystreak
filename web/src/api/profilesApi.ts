@@ -90,12 +90,25 @@ export async function createProfile(
 
 export async function updateProfile(
   userId: string,
-  fields: Partial<{ displayName: string; isPublic: boolean; bio: string }>
+  fields: Partial<{ displayName: string; isPublic: boolean; bio: string; avatarUrl: string | null }>
 ): Promise<void> {
   const patch: Partial<ProfileRow> = {};
   if (fields.displayName !== undefined) patch.display_name = fields.displayName;
   if (fields.isPublic !== undefined) patch.is_public = fields.isPublic;
   if (fields.bio !== undefined) patch.bio = fields.bio;
+  if (fields.avatarUrl !== undefined) patch.avatar_url = fields.avatarUrl;
   const { error } = await supabase.from("profiles").update(patch).eq("id", userId);
   if (error) throw error;
+}
+
+/** Uploads a resized avatar image to the user's storage folder and returns its public URL. */
+export async function uploadAvatar(userId: string, blob: Blob): Promise<string> {
+  const path = `${userId}/avatar-${Date.now()}.webp`;
+  const { error } = await supabase.storage.from("avatars").upload(path, blob, {
+    contentType: "image/webp",
+    upsert: true,
+  });
+  if (error) throw error;
+  const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+  return data.publicUrl;
 }

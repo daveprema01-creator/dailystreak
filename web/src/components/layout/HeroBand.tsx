@@ -2,7 +2,9 @@ import { Link } from "react-router-dom";
 import { currentPerfectDayStreak, last12WeeksRate, longestStreak, restDaysLeft, getPeriod, getTarget, countOnDate, countInWindow, periodDays, todayKey, type Habit } from "../../lib/habits";
 import { useSessionStore } from "../../store/sessionStore";
 import { useDisplayName } from "../../hooks/useSession";
+import { useOwnProfile } from "../../hooks/useProfile";
 import { ThemeToggle } from "./ThemeToggle";
+import { Avatar } from "../ui/Avatar";
 
 function getTimeOfDayGreeting(): string {
   const hour = new Date().getHours();
@@ -18,6 +20,7 @@ interface HeroBandProps {
 export function HeroBand({ habits }: HeroBandProps) {
   const user = useSessionStore((s) => s.user);
   const name = useDisplayName();
+  const { profile: ownProfile } = useOwnProfile();
 
   let longestHabit: Habit | null = null;
   let longestValue = -1;
@@ -60,12 +63,12 @@ export function HeroBand({ habits }: HeroBandProps) {
               Friends
             </Link>
           )}
-          {user && (
-            <Link to="/feed" className="hero-text-btn">
-              Feed
-            </Link>
-          )}
-          <Link to={user ? "/settings" : "/sign-in"} className={`account-btn${user ? " signed-in" : ""}`}>
+          <Link
+            to={user ? "/settings" : "/sign-in"}
+            className={`account-btn${user ? " signed-in" : ""}`}
+            style={user ? { display: "inline-flex", alignItems: "center", gap: 8 } : undefined}
+          >
+            {user && <Avatar avatarUrl={ownProfile?.avatarUrl} name={name || user.email || "?"} size={22} />}
             {user ? name || user.email : "Sign in to sync"}
           </Link>
           <ThemeToggle />

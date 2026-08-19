@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useSession, useDisplayName } from "./hooks/useSession";
 import { useOwnProfile } from "./hooks/useProfile";
 import { useSessionStore } from "./store/sessionStore";
@@ -11,7 +11,6 @@ import { Insights } from "./routes/Insights";
 import { Settings } from "./routes/Settings";
 import { Profile } from "./routes/Profile";
 import { Friends } from "./routes/Friends";
-import { Feed } from "./routes/Feed";
 import { AuthPage } from "./routes/AuthPage";
 
 /**
@@ -45,7 +44,7 @@ export default function App() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/u/:username" element={<Profile />} />
         <Route path="/friends" element={<Friends />} />
-        <Route path="/feed" element={<Feed />} />
+        <Route path="/feed" element={<Navigate to="/friends" replace />} />
         <Route path="/sign-in" element={<AuthPage mode="sign-in" />} />
         <Route path="/sign-up" element={<AuthPage mode="sign-up" />} />
         <Route path="*" element={<PersonalDashboard />} />

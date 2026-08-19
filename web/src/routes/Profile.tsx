@@ -5,13 +5,19 @@ import { useSharedHabits } from "../hooks/useSharedHabits";
 import { PageShell } from "../components/layout/PageShell";
 import { FollowButton } from "../components/social/FollowButton";
 import { SharedHabitCard } from "../components/social/SharedHabitCard";
+import { Avatar } from "../components/ui/Avatar";
 import type { Profile as ProfileData } from "../api/profilesApi";
 
 function ProfileCard({ profile, actions }: { profile: ProfileData; actions?: React.ReactNode }) {
   return (
     <>
       <div className="review-eyebrow">Profile</div>
-      <h2 className="review-headline">@{profile.username}</h2>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 4 }}>
+        <Avatar avatarUrl={profile.avatarUrl} name={profile.displayName || profile.username} size={56} />
+        <h2 className="review-headline" style={{ margin: 0 }}>
+          @{profile.username}
+        </h2>
+      </div>
       <p className="review-lead">{profile.displayName || "No display name set."}</p>
 
       <div className="history-stats" style={{ maxWidth: 480 }}>
