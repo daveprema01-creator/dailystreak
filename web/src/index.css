@@ -322,8 +322,13 @@ body {
   background: var(--card-bg);
   border-radius: 12px;
   padding: 24px;
-  transition: transform 0.2s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
   animation: card-in 0.25s ease;
+}
+
+.habit-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow);
 }
 
 @keyframes card-in {
@@ -750,6 +755,7 @@ body {
   position: fixed;
   inset: 0;
   background: rgba(28, 30, 38, 0.45);
+  backdrop-filter: blur(3px);
   align-items: center;
   justify-content: center;
   padding: 20px;
@@ -758,9 +764,20 @@ body {
 
 .modal-overlay.visible {
   display: flex;
+  animation: overlay-in 0.2s ease;
+}
+
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .modal {
+  position: relative;
   background: var(--card-bg);
   border-radius: 16px;
   padding: 28px;
@@ -768,7 +785,29 @@ body {
   width: 100%;
   box-shadow: var(--shadow-hover);
   text-align: center;
-  animation: card-in 0.2s ease;
+  animation: modal-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+.modal::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 25%, transparent));
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .modal h2 {
@@ -812,11 +851,16 @@ body {
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-.modal button:hover {
+.modal button:hover:not(:disabled) {
   background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.modal button:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
 }
 
 .oauth-buttons {
@@ -1749,10 +1793,63 @@ body {
 .modal-share-row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 2px;
   color: var(--text-muted);
   font-size: 0.85rem;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.toggle-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.toggle-track {
+  position: relative;
+  display: inline-block;
+  width: 42px;
+  height: 24px;
+  border-radius: 9999px;
+  background: var(--border);
+  transition: background 0.2s ease;
+}
+
+.toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--on-accent);
+  box-shadow: 0 1px 3px rgba(28, 30, 38, 0.3);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.toggle-switch input:checked + .toggle-track {
+  background: var(--accent);
+}
+
+.toggle-switch input:checked + .toggle-track .toggle-thumb {
+  transform: translateX(18px);
+}
+
+.toggle-switch input:focus-visible + .toggle-track {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.toggle-switch:active .toggle-thumb {
+  width: 20px;
 }
 
 .modal-rest-hint {
@@ -2065,11 +2162,19 @@ body {
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .follow-btn:hover:not(:disabled) {
   background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.follow-btn:active:not(:disabled) {
+  transform: translateY(0) scale(0.96);
+  box-shadow: none;
 }
 
 .follow-btn:disabled {
@@ -2088,6 +2193,7 @@ body {
 .follow-btn-following:hover {
   border-color: var(--danger);
   color: var(--danger);
+  box-shadow: none;
 }
 
 .friend-tabs {
@@ -2105,13 +2211,24 @@ body {
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.friend-tab:hover:not(.active) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.friend-tab:active {
+  transform: scale(0.96);
 }
 
 .friend-tab.active {
   border-color: var(--accent);
   background: var(--accent);
   color: var(--on-accent);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .friend-list {
@@ -2128,6 +2245,15 @@ body {
   padding: 12px 14px;
   border-radius: 10px;
   background: var(--card-bg);
+  border: 1px solid transparent;
+  animation: card-in 0.25s ease;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.friend-row:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+  border-color: var(--border-soft);
 }
 
 .friend-row-identity {
@@ -2142,6 +2268,7 @@ body {
   font-weight: 600;
   color: var(--text);
   text-decoration: none;
+  transition: color 0.15s ease;
 }
 
 .friend-row-name:hover {
@@ -2169,10 +2296,16 @@ body {
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
 }
 
 .friend-accept-btn:hover {
   background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.friend-accept-btn:active {
+  transform: translateY(0) scale(0.95);
 }
 
 .friend-reject-btn {
@@ -2184,6 +2317,7 @@ body {
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
 
 .friend-reject-btn:hover {
@@ -2191,10 +2325,16 @@ body {
   color: var(--danger);
 }
 
+.friend-reject-btn:active {
+  transform: scale(0.95);
+}
+
 .friend-empty {
   color: var(--text-faint);
   font-size: 0.9rem;
-  padding: 8px 4px;
+  text-align: center;
+  padding: 32px 16px;
+  animation: card-in 0.25s ease;
 }
 
 .friend-search-input {
@@ -2206,6 +2346,7 @@ body {
   background: var(--card-bg);
   color: var(--text);
   font: inherit;
+  box-shadow: var(--shadow);
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -2213,4 +2354,25 @@ body {
 .friend-search-input:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.feed-row-content {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.feed-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-size: 1rem;
+  font-weight: 700;
 }

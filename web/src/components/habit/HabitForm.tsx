@@ -127,12 +127,17 @@ export function HabitForm({ mode, initial, onSubmit, onCancel, showSharing }: Ha
         <>
           <div className="modal-share-row">
             <label htmlFor="edit-shared-input">Share with followers</label>
-            <input
-              id="edit-shared-input"
-              type="checkbox"
-              checked={shared}
-              onChange={(e) => setShared(e.target.checked)}
-            />
+            <label className="toggle-switch">
+              <input
+                id="edit-shared-input"
+                type="checkbox"
+                checked={shared}
+                onChange={(e) => setShared(e.target.checked)}
+              />
+              <span className="toggle-track">
+                <span className="toggle-thumb" />
+              </span>
+            </label>
           </div>
           <p className="modal-rest-hint">
             {shared

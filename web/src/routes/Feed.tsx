@@ -48,18 +48,21 @@ export function Feed() {
           });
           return (
             <div className="friend-row" key={event.id}>
-              <div className="friend-row-identity">
-                <span style={{ fontSize: "0.9rem", color: "var(--text)" }}>
-                  {profile ? (
-                    <Link to={`/u/${profile.username}`} className="friend-row-name" style={{ display: "inline" }}>
-                      {profile.displayName || profile.username}
-                    </Link>
-                  ) : (
-                    "Someone you follow"
-                  )}{" "}
-                  hit a {event.milestone}-day streak on "{event.habitName}"
-                </span>
-                <span className="friend-row-username">{dateLabel}</span>
+              <div className="feed-row-content">
+                <div className="feed-badge">{event.milestone}</div>
+                <div className="friend-row-identity">
+                  <span style={{ fontSize: "0.9rem", color: "var(--text)" }}>
+                    {profile ? (
+                      <Link to={`/u/${profile.username}`} className="friend-row-name" style={{ display: "inline" }}>
+                        {profile.displayName || profile.username}
+                      </Link>
+                    ) : (
+                      "Someone you follow"
+                    )}{" "}
+                    hit a {event.milestone}-day streak on "{event.habitName}"
+                  </span>
+                  <span className="friend-row-username">{dateLabel}</span>
+                </div>
               </div>
             </div>
           );
