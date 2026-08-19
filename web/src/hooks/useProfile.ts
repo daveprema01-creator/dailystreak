@@ -1,7 +1,14 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSessionStore } from "../store/sessionStore";
-import { createProfile, fetchOwnProfile, updateProfile, type Profile } from "../api/profilesApi";
+import {
+  createProfile,
+  fetchOwnProfile,
+  fetchProfileByUsername,
+  fetchProfilesByIds,
+  updateProfile,
+  type Profile,
+} from "../api/profilesApi";
 
 function ownProfileKey(userId: string | undefined) {
   return ["profile", userId ?? "none"] as const;
@@ -57,4 +64,32 @@ export function useOwnProfile() {
     claimProfile,
     saveProfile,
   };
+}
+
+/** Any user's profile by username — for viewing someone else's `/u/:username` page. */
+export function useProfileByUsername(username: string | undefined) {
+  const query = useQuery({
+    queryKey: ["profile-by-username", username ?? "none"],
+    queryFn: () => fetchProfileByUsername(username as string),
+    enabled: !!username,
+    staleTime: Infinity,
+  });
+  return { profile: query.data ?? null, isLoading: query.isLoading };
+}
+
+/** Batch profile lookup, used to resolve names/avatars for a list of follow edges. */
+export function useProfilesByIds(ids: string[]) {
+  const key = useMemo(() => [...new Set(ids)].sort(), [ids]);
+  const query = useQuery({
+    queryKey: ["profiles-by-ids", key],
+    queryFn: () => fetchProfilesByIds(key),
+    enabled: key.length > 0,
+    staleTime: Infinity,
+  });
+  const profiles = useMemo(() => {
+    const map = new Map<string, Profile>();
+    (query.data ?? []).forEach((p) => map.set(p.id, p));
+    return map;
+  }, [query.data]);
+  return { profiles, isLoading: query.isLoading };
 }

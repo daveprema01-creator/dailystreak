@@ -55,6 +55,11 @@ export function HeroBand({ habits }: HeroBandProps) {
           <Link to="/review" className="hero-text-btn">
             Weekly review
           </Link>
+          {user && (
+            <Link to="/friends" className="hero-text-btn">
+              Friends
+            </Link>
+          )}
           <Link to={user ? "/settings" : "/sign-in"} className={`account-btn${user ? " signed-in" : ""}`}>
             {user ? name || user.email : "Sign in to sync"}
           </Link>

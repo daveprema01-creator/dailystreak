@@ -44,6 +44,13 @@ export async function fetchProfileByUsername(username: string): Promise<Profile 
   return data ? rowToProfile(data as ProfileRow) : null;
 }
 
+export async function fetchProfilesByIds(ids: string[]): Promise<Profile[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase.from("profiles").select("*").in("id", ids);
+  if (error) throw error;
+  return (data as ProfileRow[]).map(rowToProfile);
+}
+
 export async function isUsernameAvailable(username: string): Promise<boolean> {
   const { data, error } = await supabase.from("profiles").select("id").eq("username", username).maybeSingle();
   if (error) throw error;

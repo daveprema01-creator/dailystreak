@@ -2044,3 +2044,146 @@ body {
 .settings-link:hover {
   text-decoration: underline;
 }
+
+/* --- Follows (Phase C — React app addition, no vanilla-app precedent) --- */
+
+.follow-btn {
+  padding: 8px 18px;
+  border-radius: 10px;
+  border: none;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.follow-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.follow-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.follow-btn-pending,
+.follow-btn-following {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.follow-btn-pending:hover,
+.follow-btn-following:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.friend-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.friend-tab {
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.friend-tab.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.friend-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.friend-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--card-bg);
+}
+
+.friend-row-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.friend-row-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.friend-row-name:hover {
+  color: var(--accent);
+}
+
+.friend-row-username {
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+
+.friend-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.friend-accept-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.friend-accept-btn:hover {
+  background: var(--accent-hover);
+}
+
+.friend-reject-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.friend-reject-btn:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.friend-empty {
+  color: var(--text-faint);
+  font-size: 0.9rem;
+  padding: 8px 4px;
+}

@@ -10,6 +10,7 @@ import { WeeklyReview } from "./routes/WeeklyReview";
 import { Insights } from "./routes/Insights";
 import { Settings } from "./routes/Settings";
 import { Profile } from "./routes/Profile";
+import { Friends } from "./routes/Friends";
 import { AuthPage } from "./routes/AuthPage";
 
 /**
@@ -42,6 +43,7 @@ export default function App() {
         <Route path="/insights" element={<Insights />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/u/:username" element={<Profile />} />
+        <Route path="/friends" element={<Friends />} />
         <Route path="/sign-in" element={<AuthPage mode="sign-in" />} />
         <Route path="/sign-up" element={<AuthPage mode="sign-up" />} />
         <Route path="*" element={<PersonalDashboard />} />

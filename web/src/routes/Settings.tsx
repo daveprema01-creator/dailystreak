@@ -42,6 +42,10 @@ export function Settings() {
     try {
       if (user) {
         await setAccountDisplayName(trimmed);
+        // profiles.display_name is a separate snapshot taken at claim time (Phase B) — keep
+        // it in sync here too, since Phase C's follow lists/profile pages read it directly
+        // and would otherwise show a name the user renamed away from months ago.
+        if (profile) await saveProfile({ displayName: trimmed });
       } else {
         setLocalName(trimmed);
       }
