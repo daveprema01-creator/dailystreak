@@ -159,8 +159,17 @@ export function PersonalDashboard() {
 
       <HistoryModal habit={historyHabit} onClose={() => setHistoryHabitId(null)} />
 
-      <Modal open={!!editHabit} onClose={() => setEditHabitId(null)}>
-        <h2>Edit habit</h2>
+      <Modal open={!!editHabit} onClose={() => setEditHabitId(null)} wide>
+        <button className="modal-close-btn" aria-label="Close" onClick={() => setEditHabitId(null)}>
+          ✕
+        </button>
+        <div className="edit-habit-header">
+          <span className="edit-habit-icon">✎</span>
+          <div>
+            <h2>Edit habit</h2>
+            {editHabit && <p className="edit-habit-subtitle">Fine-tune "{editHabit.name}"</p>}
+          </div>
+        </div>
         {editHabit && (
           <HabitForm
             mode="edit"

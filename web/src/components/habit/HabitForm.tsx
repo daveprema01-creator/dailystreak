@@ -97,34 +97,63 @@ export function HabitForm({ mode, initial, onSubmit, onCancel, showSharing }: Ha
   }
 
   return (
-    <form onSubmit={handleSubmit}>
-      <input
-        type="text"
-        placeholder="Habit name"
-        autoComplete="off"
-        maxLength={60}
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        autoFocus
-      />
-      {goalRow}
-      <div className="modal-rest-row">
-        <label htmlFor="edit-rest-allowance-input">Rest days per month</label>
+    <form className="edit-habit-form" onSubmit={handleSubmit}>
+      <div className="field-group">
+        <label className="field-label" htmlFor="edit-habit-name-input">
+          Habit name
+        </label>
         <input
-          id="edit-rest-allowance-input"
-          type="number"
-          min={0}
-          max={31}
-          value={restDayAllowance}
-          onChange={(e) => setRestDayAllowance(Number(e.target.value))}
+          id="edit-habit-name-input"
+          type="text"
+          placeholder="Habit name"
+          autoComplete="off"
+          maxLength={60}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          autoFocus
         />
       </div>
-      <p className="modal-rest-hint">
-        Spend a rest day to credit a missed period without breaking your streak — it doesn't count as a real
-        completion.
-      </p>
+
+      <div className="field-group">
+        <label className="field-label">Goal</label>
+        <div className="modal-goal-row">
+          <input type="number" min={1} max={99} value={target} onChange={(e) => setTarget(Number(e.target.value))} />
+          <span>time(s) every</span>
+          <input
+            type="number"
+            min={1}
+            max={99}
+            value={periodValue}
+            onChange={(e) => setPeriodValue(Number(e.target.value))}
+          />
+          <select value={periodUnit} onChange={(e) => setPeriodUnit(e.target.value as PeriodUnit)}>
+            <option value="day">day(s)</option>
+            <option value="week">week(s)</option>
+            <option value="month">month(s)</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="field-group">
+        <div className="modal-rest-row">
+          <label htmlFor="edit-rest-allowance-input">Rest days per month</label>
+          <input
+            id="edit-rest-allowance-input"
+            type="number"
+            min={0}
+            max={31}
+            value={restDayAllowance}
+            onChange={(e) => setRestDayAllowance(Number(e.target.value))}
+          />
+        </div>
+        <p className="modal-rest-hint">
+          Spend a rest day to credit a missed period without breaking your streak — it doesn't count as a real
+          completion.
+        </p>
+      </div>
+
       {showSharing && (
-        <>
+        <div className="field-group">
           <div className="modal-share-row">
             <label htmlFor="edit-shared-input">Share with followers</label>
             <label className="toggle-switch">
@@ -144,8 +173,9 @@ export function HabitForm({ mode, initial, onSubmit, onCancel, showSharing }: Ha
               ? "Followers you've accepted can see this habit's progress and milestones on your profile."
               : "Only you can see this habit — turn on to show it on your profile and share milestones in the feed."}
           </p>
-        </>
+        </div>
       )}
+
       <div className="modal-btn-row">
         <button type="button" className="modal-btn-secondary" onClick={onCancel}>
           Cancel
