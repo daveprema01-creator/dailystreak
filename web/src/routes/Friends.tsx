@@ -171,7 +171,7 @@ export function Friends() {
 
   const { requests, accept, reject } = useFriendRequests();
   const { following, unfollow } = useFollowingList();
-  const { followers } = useFollowersList();
+  const { followers, remove: removeFollower } = useFollowersList();
   const { events, isLoading: feedLoading } = useActivityFeed();
 
   const allIds = [
@@ -284,7 +284,16 @@ export function Friends() {
         <div className="friend-list">
           {followers.length === 0 && <p className="friend-empty">No followers yet.</p>}
           {followers.map((f) => (
-            <FriendRow key={f.id} userId={f.followerId} profile={profiles.get(f.followerId)} actions={null} />
+            <FriendRow
+              key={f.id}
+              userId={f.followerId}
+              profile={profiles.get(f.followerId)}
+              actions={
+                <button type="button" className="friend-reject-btn" onClick={() => removeFollower(f.followerId)}>
+                  Remove
+                </button>
+              }
+            />
           ))}
         </div>
       )}

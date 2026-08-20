@@ -4,11 +4,13 @@ import { useSessionStore } from "../store/sessionStore";
 import { showInfoToast } from "../store/toastStore";
 import {
   acceptFollow as apiAcceptFollow,
+  fetchFollowCounts,
   fetchFollowEdge,
   fetchFollowers,
   fetchFollowing,
   fetchIncomingRequests,
   rejectFollow as apiRejectFollow,
+  removeFollower as apiRemoveFollower,
   requestFollow as apiRequestFollow,
   unfollow as apiUnfollow,
   type FollowEdge,
@@ -25,6 +27,9 @@ function followingKey(userId: string | undefined) {
 }
 function followersKey(userId: string | undefined) {
   return ["followers", userId ?? "none"] as const;
+}
+function followCountsKey(userId: string | undefined) {
+  return ["follow-counts", userId ?? "none"] as const;
 }
 
 /** Follow relationship from the signed-in user to `targetId` — drives FollowButton. */
@@ -48,6 +53,8 @@ export function useFollowStatus(targetId: string | undefined) {
       const edge = await apiRequestFollow(targetId);
       queryClient.setQueryData<FollowEdge | null>(key, edge);
       queryClient.invalidateQueries({ queryKey: followingKey(userId) });
+      queryClient.invalidateQueries({ queryKey: followCountsKey(userId) });
+      queryClient.invalidateQueries({ queryKey: followCountsKey(targetId) });
     } catch (err) {
       showInfoToast(`Couldn't follow — ${(err as Error).message}`);
     }
@@ -61,6 +68,8 @@ export function useFollowStatus(targetId: string | undefined) {
     try {
       await apiUnfollow(targetId);
       queryClient.invalidateQueries({ queryKey: followingKey(userId) });
+      queryClient.invalidateQueries({ queryKey: followCountsKey(userId) });
+      queryClient.invalidateQueries({ queryKey: followCountsKey(targetId) });
     } catch (err) {
       queryClient.setQueryData<FollowEdge | null>(key, previous ?? null);
       showInfoToast(`Couldn't update follow — ${(err as Error).message}`);
@@ -101,6 +110,8 @@ export function useFriendRequests() {
       try {
         await apiAcceptFollow(requesterId);
         queryClient.invalidateQueries({ queryKey: followersKey(userId) });
+        queryClient.invalidateQueries({ queryKey: followCountsKey(userId) });
+        queryClient.invalidateQueries({ queryKey: followCountsKey(requesterId) });
       } catch (err) {
         queryClient.setQueryData<FollowEdge[]>(key, current);
         showInfoToast(`Couldn't accept request — ${(err as Error).message}`);
@@ -171,13 +182,47 @@ export function useFollowingList() {
 export function useFollowersList() {
   const user = useSessionStore((s) => s.user);
   const userId = user?.id;
+  const queryClient = useQueryClient();
+  const key = followersKey(userId);
 
   const query = useQuery({
-    queryKey: followersKey(userId),
+    queryKey: key,
     queryFn: () => fetchFollowers(userId as string),
     enabled: !!userId,
     staleTime: Infinity,
   });
 
-  return { followers: query.data ?? [], isLoading: query.isLoading };
+  const remove = useCallback(
+    async (followerId: string) => {
+      const current = query.data ?? [];
+      queryClient.setQueryData<FollowEdge[]>(
+        key,
+        current.filter((f) => f.followerId !== followerId)
+      );
+      try {
+        await apiRemoveFollower(followerId);
+        queryClient.invalidateQueries({ queryKey: followCountsKey(userId) });
+        queryClient.invalidateQueries({ queryKey: followCountsKey(followerId) });
+      } catch (err) {
+        queryClient.setQueryData<FollowEdge[]>(key, current);
+        showInfoToast(`Couldn't remove follower — ${(err as Error).message}`);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [query.data, queryClient, userId]
+  );
+
+  return { followers: query.data ?? [], isLoading: query.isLoading, remove };
+}
+
+/** Follower/following counts for any user — safe across the RLS boundary since it's aggregate-only. */
+export function useFollowCounts(userId: string | undefined) {
+  const query = useQuery({
+    queryKey: followCountsKey(userId),
+    queryFn: () => fetchFollowCounts(userId as string),
+    enabled: !!userId,
+    staleTime: Infinity,
+  });
+
+  return { counts: query.data ?? { followers: 0, following: 0 }, isLoading: query.isLoading };
 }

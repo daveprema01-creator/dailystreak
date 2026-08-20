@@ -97,3 +97,22 @@ export async function unfollow(targetId: string): Promise<void> {
   const { error } = await supabase.rpc("unfollow", { target_id: targetId });
   if (error) throw error;
 }
+
+/** Removes an incoming follower — the reverse of unfollow, called by the person being followed. */
+export async function removeFollower(followerId: string): Promise<void> {
+  const { error } = await supabase.rpc("remove_follower", { follower_user_id: followerId });
+  if (error) throw error;
+}
+
+export interface FollowCounts {
+  followers: number;
+  following: number;
+}
+
+/** Follower/following counts for any user — works across the RLS boundary since it only exposes aggregates. */
+export async function fetchFollowCounts(userId: string): Promise<FollowCounts> {
+  const { data, error } = await supabase.rpc("get_follow_counts", { target_id: userId }).single();
+  if (error) throw error;
+  const row = data as { followers_count: number; following_count: number };
+  return { followers: row.followers_count, following: row.following_count };
+}
