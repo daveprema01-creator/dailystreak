@@ -2,8 +2,7 @@ import { Link, useParams } from "react-router-dom";
 import { useSessionStore } from "../store/sessionStore";
 import { useOwnProfile, useProfileByUsername } from "../hooks/useProfile";
 import { useSharedHabits } from "../hooks/useSharedHabits";
-import { useFollowersList, useFollowingList, useFollowCounts } from "../hooks/useFollows";
-import { useHabits } from "../hooks/useHabits";
+import { useFollowCounts } from "../hooks/useFollows";
 import { PageShell } from "../components/layout/PageShell";
 import { FollowButton } from "../components/social/FollowButton";
 import { SharedHabitCard } from "../components/social/SharedHabitCard";
@@ -75,12 +74,12 @@ export function Profile() {
   const isOwn = !!ownProfile && ownProfile.username === username;
 
   const { profile: otherProfile, isLoading: otherLoading } = useProfileByUsername(isOwn ? undefined : username);
-  const { habits: sharedHabits } = useSharedHabits(isOwn ? undefined : otherProfile?.id);
+  const profile = isOwn ? ownProfile : otherProfile;
 
-  const { followers: ownFollowers } = useFollowersList();
-  const { following: ownFollowing } = useFollowingList();
-  const { activeHabits: ownActiveHabits } = useHabits();
-  const { counts: otherCounts } = useFollowCounts(isOwn ? undefined : otherProfile?.id);
+  // Own profile renders identically to how anyone else sees it — same shared-only habit list,
+  // same aggregate counts — rather than a special owner's-eye view of everything private.
+  const { habits: sharedHabits } = useSharedHabits(profile?.id);
+  const { counts } = useFollowCounts(profile?.id);
 
   if (!user) {
     return (
@@ -107,23 +106,7 @@ export function Profile() {
     );
   }
 
-  if (isOwn) {
-    return (
-      <PageShell>
-        <ProfileCard
-          profile={ownProfile}
-          stats={{ followers: ownFollowers.length, following: ownFollowing.length, habits: ownActiveHabits.length }}
-          actions={
-            <Link to="/settings" className="review-set-targets" style={{ textDecoration: "none", display: "inline-block" }}>
-              Edit profile
-            </Link>
-          }
-        />
-      </PageShell>
-    );
-  }
-
-  if (!otherProfile) {
+  if (!profile) {
     return (
       <PageShell>
         <div className="review-eyebrow">Profile</div>
@@ -136,9 +119,17 @@ export function Profile() {
   return (
     <PageShell>
       <ProfileCard
-        profile={otherProfile}
-        stats={{ followers: otherCounts.followers, following: otherCounts.following, habits: sharedHabits.length }}
-        actions={<FollowButton targetId={otherProfile.id} />}
+        profile={profile}
+        stats={{ followers: counts.followers, following: counts.following, habits: sharedHabits.length }}
+        actions={
+          isOwn ? (
+            <Link to="/settings" className="review-set-targets" style={{ textDecoration: "none", display: "inline-block" }}>
+              Edit profile
+            </Link>
+          ) : (
+            <FollowButton targetId={profile.id} />
+          )
+        }
       />
       {sharedHabits.length > 0 && (
         <div className="habit-list" style={{ marginTop: 24 }}>
