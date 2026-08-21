@@ -154,8 +154,8 @@ export function useHabits() {
   // --- Mutations ---
 
   const addHabit = useCallback(
-    async (name: string, target: number, periodValue: number, periodUnit: PeriodUnit) => {
-      const habit = newHabit(name, target, periodValue, periodUnit);
+    async (name: string, target: number, periodValue: number, periodUnit: PeriodUnit, shared = false) => {
+      const habit = newHabit(name, target, periodValue, periodUnit, shared);
       const next = [...getCurrent(), habit];
       setHabits(next);
       try {

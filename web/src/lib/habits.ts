@@ -470,7 +470,13 @@ export function rowToHabit(row: HabitRow): Habit {
   };
 }
 
-export function newHabit(name: string, target: number, periodValue: number, periodUnit: PeriodUnit): Habit {
+export function newHabit(
+  name: string,
+  target: number,
+  periodValue: number,
+  periodUnit: PeriodUnit,
+  shared = false
+): Habit {
   return {
     id: crypto.randomUUID(),
     name,
@@ -483,6 +489,6 @@ export function newHabit(name: string, target: number, periodValue: number, peri
     restDays: [],
     archivedAt: null,
     restDayAllowance: 3,
-    shared: false,
+    shared,
   };
 }

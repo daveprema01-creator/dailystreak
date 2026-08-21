@@ -39,13 +39,14 @@ export function HabitForm({ mode, initial, onSubmit, onCancel, showSharing }: Ha
       periodValue: Math.max(1, periodValue || 1),
       periodUnit,
       ...(mode === "edit" ? { restDayAllowance: Math.max(0, restDayAllowance || 0) } : {}),
-      ...(mode === "edit" && showSharing ? { shared } : {}),
+      ...(showSharing ? { shared } : {}),
     });
     if (mode === "add") {
       setName("");
       setTarget(1);
       setPeriodValue(1);
       setPeriodUnit("day");
+      setShared(false);
     }
   }
 
@@ -92,6 +93,22 @@ export function HabitForm({ mode, initial, onSubmit, onCancel, showSharing }: Ha
           <button type="submit">Add</button>
         </div>
         {goalRow}
+        {showSharing && (
+          <div className="modal-share-row" style={{ padding: "10px 4px 0" }}>
+            <label htmlFor="add-shared-input">Share with followers</label>
+            <label className="toggle-switch">
+              <input
+                id="add-shared-input"
+                type="checkbox"
+                checked={shared}
+                onChange={(e) => setShared(e.target.checked)}
+              />
+              <span className="toggle-track">
+                <span className="toggle-thumb" />
+              </span>
+            </label>
+          </div>
+        )}
       </form>
     );
   }

@@ -84,7 +84,7 @@ export function PersonalDashboard() {
   }
 
   function handleAdd(values: HabitFormValues) {
-    addHabit(values.name, values.target, values.periodValue, values.periodUnit);
+    addHabit(values.name, values.target, values.periodValue, values.periodUnit, values.shared);
     setAddFormOpen(false);
   }
 
@@ -150,7 +150,7 @@ export function PersonalDashboard() {
               + Add a habit
             </button>
           ) : (
-            <HabitForm mode="add" onSubmit={handleAdd} />
+            <HabitForm mode="add" onSubmit={handleAdd} showSharing={signedIn} />
           )}
 
           <ArchiveList archived={archivedHabits} onUnarchive={unarchiveHabit} onDelete={deleteHabit} />
